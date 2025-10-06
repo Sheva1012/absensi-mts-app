@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../main1.dart'; // Import untuk AdminDashboardPage
+import '../main.dart'; // Import untuk AdminDashboardPage
 
 // Warna yang sering digunakan (disesuaikan dengan skema Anda)
 const Color _primaryColor = Color(0xFF3498db); // Biru
