@@ -70,12 +70,11 @@ class _PageGuruState extends State<PageGuru> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient:
-            LinearGradient(colors: [Colors.green[700]!, Colors.green[500]!]),
+        gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[500]!]),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.green.withOpacity(0.3),
+              color: Colors.blue.withOpacity(0.3),
               blurRadius: 12,
               offset: const Offset(0, 4))
         ],
