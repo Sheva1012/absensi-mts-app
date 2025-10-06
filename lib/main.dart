@@ -11,6 +11,7 @@ import 'web_admin/data_siswa.dart';
 // import 'web_admin/data_absensi.dart'; 
 // import 'web_admin/data_surat.dart'; 
 
+
 Future<void> main() async {
  WidgetsFlutterBinding.ensureInitialized();
 
@@ -46,7 +47,7 @@ class MyApp extends StatelessWidget {
     Locale('id', 'ID'),
     Locale('en', 'US'),
    ],
-   home: const AdminDashboardPage(),
+   home: const LoginScreen(),
   );
  }
 }

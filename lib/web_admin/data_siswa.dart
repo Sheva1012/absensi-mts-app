@@ -14,36 +14,83 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   final SupabaseClient supabase = Supabase.instance.client;
   bool isLoading = true;
   List<Map<String, dynamic>> siswaData = [];
+  List<Map<String, dynamic>> kelasList = [];
+
+  String? selectedKelasId;
+  String? selectedStatus;
+  final TextEditingController searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    fetchSiswa();
+    fetchKelas();
+  }
+
+  Future<void> fetchKelas() async {
+    try {
+      final response = await supabase
+          .from('kelas')
+          .select('id, nama_kelas')
+          .order('nama_kelas', ascending: true);
+
+      setState(() {
+        kelasList = List<Map<String, dynamic>>.from(response);
+      });
+
+      await fetchSiswa();
+    } catch (e) {
+      print('Error fetching kelas: $e');
+    }
   }
 
   Future<void> fetchSiswa() async {
-   setState(() => isLoading = true);
-   try {
-    // Corrected Supabase query using inner join syntax
-    final response = await supabase.from('siswa').select('*, kelas!inner(nama_kelas)');
+    setState(() => isLoading = true);
+    try {
+      var query = supabase.from('siswa').select('*, kelas!inner(nama_kelas)');
 
-    setState(() {
-     siswaData = List<Map<String, dynamic>>.from(response);
-     siswaData.sort((a, b) {
-      int kelasComparison = (a['kelas_id'] ?? 0).compareTo(b['kelas_id'] ?? 0);
-      if (kelasComparison != 0) {
-       return kelasComparison;
+      if (selectedKelasId != null && selectedKelasId!.isNotEmpty) {
+        query = query.eq('kelas_id', selectedKelasId!);
       }
-      return (a['no'] ?? 0).compareTo(b['no'] ?? 0);
-     });
-     isLoading = false;
-    });
-   } catch (e) {
-    print('Error fetching data: $e');
-    setState(() {
-     isLoading = false;
-    });
-   }
+
+      if (selectedStatus != null && selectedStatus!.isNotEmpty) {
+        query = query.eq('status', selectedStatus!);
+      }
+
+      final response = await query.order('kelas_id', ascending: true);
+      List<Map<String, dynamic>> allData =
+          List<Map<String, dynamic>>.from(response);
+
+      // 🔍 Filter nama di sisi client (karena Supabase tidak pakai LIKE di Flutter SDK)
+      if (searchController.text.trim().isNotEmpty) {
+        String keyword = searchController.text.toLowerCase();
+        allData = allData
+            .where((s) => (s['nama'] ?? '')
+                .toString()
+                .toLowerCase()
+                .contains(keyword))
+            .toList();
+      }
+
+      setState(() {
+        siswaData = allData;
+        siswaData.sort((a, b) {
+          int kelasComparison =
+              (a['kelas_id'] ?? 0).compareTo(b['kelas_id'] ?? 0);
+          if (kelasComparison != 0) return kelasComparison;
+          return (a['no'] ?? 0).compareTo(b['no'] ?? 0);
+        });
+        isLoading = false;
+      });
+    } catch (e) {
+      print('Error fetching siswa: $e');
+      setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -57,6 +104,8 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
           children: [
             _buildHeader(),
             const SizedBox(height: 28),
+            _buildFilter(),
+            const SizedBox(height: 20),
             isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _buildTable(),
@@ -102,6 +151,118 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
     );
   }
 
+  /// 🔹 FILTER SECTION: kelas, nama, dan status
+  Widget _buildFilter() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.filter_alt, color: Colors.blueAccent),
+              SizedBox(width: 8),
+              Text(
+                "Filter Data Siswa",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              // 🔸 Filter Kelas
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: selectedKelasId,
+                  hint: const Text("Pilih Kelas"),
+                  items: [
+                    const DropdownMenuItem(
+                        value: null, child: Text("Semua Kelas")),
+                    ...kelasList.map((kelas) => DropdownMenuItem(
+                          value: kelas['id'].toString(),
+                          child: Text(kelas['nama_kelas']),
+                        )),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      selectedKelasId = value;
+                    });
+                    fetchSiswa();
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Kelas',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // 🔸 Pencarian Nama
+              Expanded(
+                child: TextField(
+                  controller: searchController,
+                  decoration: InputDecoration(
+                    labelText: 'Cari Nama',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  onChanged: (val) {
+                    fetchSiswa();
+                  },
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // 🔸 Filter Status
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: selectedStatus,
+                  hint: const Text("Semua Status"),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text("Semua Status")),
+                    DropdownMenuItem(value: "Aktif", child: Text("Aktif")),
+                    DropdownMenuItem(value: "Tidak Aktif", child: Text("Tidak Aktif")),
+                    DropdownMenuItem(value: "Lulus", child: Text("Lulus")),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      selectedStatus = value;
+                    });
+                    fetchSiswa();
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTable() {
     if (siswaData.isEmpty) {
       return const Center(
@@ -135,14 +296,30 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
             dataRowHeight: 64,
             headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
             columns: const [
-              DataColumn(label: Text('No Absen', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('NIS', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Nama', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Kelas', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Nama Ortu', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('No. Ortu', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('No',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('NIS',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('Nama',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('Kelas',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('Nama Ortu',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('No. Ortu',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('Status',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                  label: Text('Aksi',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
             ],
             rows: List.generate(siswaData.length, (i) {
               final s = siswaData[i];
@@ -150,7 +327,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                 DataCell(Text('${s['no'] ?? '-'}')),
                 DataCell(Text('${s['nis'] ?? '-'}')),
                 DataCell(Text('${s['nama'] ?? '-'}')),
-                DataCell(Text('${s['kelas']?['nama_kelas'] ?? s['kelas']?['nama'] ?? '-'}')),
+                DataCell(Text('${s['kelas']?['nama_kelas'] ?? '-'}')),
                 DataCell(Text('${s['orang_tua_nama'] ?? '-'}')),
                 DataCell(Text('${s['orang_tua_nomor'] ?? '-'}')),
                 DataCell(Text('${s['status'] ?? '-'}')),
@@ -177,7 +354,8 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       icon: Icon(icon, size: 16),
-      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      label: Text(label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
       onPressed: () {},
     );
   }
