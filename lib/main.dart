@@ -8,7 +8,7 @@ import 'web_admin/sidebar.dart';
 import 'web_admin/data_kelas.dart';
 import 'web_admin/data_guru.dart';
 import 'web_admin/data_siswa.dart';
-// import 'web_admin/data_absensi.dart'; 
+import 'web_admin/data_absensi.dart'; 
 // import 'web_admin/data_surat.dart'; 
 
 
@@ -79,7 +79,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
  // Daftar halaman yang harus sesuai dengan indeks di sidebar
  late final List<Widget> _widgetOptions = <Widget>[
   const DashboardScreen(),              // Index 0: Dashboard
-  const DataAbsensiPage(schoolName: 'MTs Sunan Gunung Jati'),  // Index 1: Absensi
+  const PageAbsensi(schoolName: 'MTs Sunan Gunung Jati'),  // Index 1: Absensi
   const PageGuru(schoolName: 'MTs Sunan Gunung Jati'),   // Index 2: Guru
   const PageKelas(schoolName: 'MTs Sunan Gunung Jati'),    // Index 3: Kelas
   const DataSiswaPage(schoolName: 'MTs Sunan Gunung Jati'), // Index 4: Siswa
