@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../main.dart'; 
+import '../main.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Import Supabase
 
 // Warna yang sering digunakan
 const Color _primaryColor = Color(0xFF1E88E5); // A darker, more distinct blue
@@ -17,28 +18,88 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false; // Tambahkan state untuk loading
 
   // Fungsi untuk menangani proses login
-  void _handleLogin() {
-    final String email = _emailController.text;
-    final String password = _passwordController.text;
+  Future<void> _handleLogin() async {
+    setState(() {
+      _isLoading = true; // Set loading state to true
+    });
 
-    if (email.isNotEmpty && password.isNotEmpty) {
-      // Implement your actual authentication logic here, e.g., API calls
-      
-      // For this demo, we'll navigate directly to the dashboard
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const AdminDashboardPage()),
-      );
-    } else {
-      // Show an error message if inputs are empty
+    final String email = _emailController.text.trim();
+    final String password = _passwordController.text.trim();
+
+    // Validasi input
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Email dan Password harus diisi.'),
           backgroundColor: Colors.red,
         ),
       );
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      // Panggil metode signInWithPassword dari Supabase
+      final AuthResponse response = await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      if (response.user != null) {
+        // Jika login berhasil
+        if (mounted) { // Periksa apakah widget masih ada
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const AdminDashboardPage()),
+          );
+        }
+      } else {
+        // Jika response.user null, artinya login gagal
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Login Gagal. Cek email dan password Anda.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } on AuthException catch (e) {
+      // Tangani error otentikasi dari Supabase
+      String errorMessage = 'Terjadi kesalahan saat login.';
+      if (e.statusCode == '400' && e.message.contains('Invalid login credentials')) {
+        errorMessage = 'Email atau password salah.';
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // Tangani error lain
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Terjadi kesalahan: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      // Pastikan loading state selalu di set false
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -181,7 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton(
-                            onPressed: _handleLogin,
+                            onPressed: _isLoading ? null : _handleLogin,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _primaryColor,
                               foregroundColor: Colors.white,
@@ -190,13 +251,17 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               elevation: 5,
                             ),
-                            child: const Text(
-                              'Login',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            child: _isLoading
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white,
+                                  )
+                                : const Text(
+                                    'Login',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ),
                         ),
                       ],
@@ -216,8 +281,8 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 // Replace with your school logo asset
                 Image.asset(
-                  'assets/Logo MTS.png', 
-                  height: 60, 
+                  'assets/Logo MTS.png',
+                  height: 60,
                 ),
                 const SizedBox(height: 8),
                 const Text(

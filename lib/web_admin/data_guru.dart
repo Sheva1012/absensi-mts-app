@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-// import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'package:multi_select_flutter/multi_select_flutter.dart';
 class PageGuru extends StatefulWidget {
   final String schoolName;
 
@@ -64,27 +63,26 @@ class _PageGuruState extends State<PageGuru> {
           child: FormTambahGuru(
             onSave: (data) async {
               try {
-                print('Data yang akan disimpan: $data');
-                
-                await Future.delayed(const Duration(seconds: 1));
-                
+                await supabase.from('guru').insert(data);
                 Navigator.of(context).pop();
-                
                 fetchGuru();
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Data guru ${data['nama']} berhasil ditambahkan'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Data guru ${data['nama']} berhasil ditambahkan'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
             },
           ),
@@ -109,27 +107,39 @@ class _PageGuruState extends State<PageGuru> {
             data: guru,
             onSave: (data) async {
               try {
-                print('Data yang akan diupdate: $data');
-                
-                await Future.delayed(const Duration(seconds: 1));
-                
+                final id = data['id'];
+                if (id == null) throw 'ID guru tidak ditemukan';
+
+                await supabase
+                    .from('guru')
+                    .update({
+                      'nama': data['nama'],
+                      'email': data['email'],
+                      'role': data['role'],
+                      'kelas_diampu': data['kelas_diampu'],
+                      'avatar_url': data['avatar_url'],
+                    })
+                    .eq('id', id);
+
                 Navigator.of(context).pop();
-                
                 fetchGuru();
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Data guru ${data['nama']} berhasil diupdate'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Data guru ${data['nama']} berhasil diupdate'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
             },
           ),
@@ -153,25 +163,33 @@ class _PageGuruState extends State<PageGuru> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               try {
-                print('Menghapus guru: ${guru['nama']}');
-                await Future.delayed(const Duration(seconds: 1));
-                
+                final id = guru['id'];
+                if (id == null) throw 'ID guru tidak ditemukan';
+
+                await supabase
+                    .from('guru')
+                    .delete()
+                    .eq('id', id);
+
                 Navigator.of(context).pop();
                 fetchGuru();
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Data guru ${guru['nama']} berhasil dihapus'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Data guru ${guru['nama']} berhasil dihapus'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
             },
             child: const Text('Hapus', style: TextStyle(color: Colors.white)),
@@ -192,6 +210,8 @@ class _PageGuruState extends State<PageGuru> {
           children: [
             _buildHeader(),
             const SizedBox(height: 28),
+            _buildAddButton(),
+            const SizedBox(height: 16),
             isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _buildTable(),
@@ -233,6 +253,25 @@ class _PageGuruState extends State<PageGuru> {
             ],
           ),
         ],
+      ),
+    );
+  }
+  
+  // New widget for the "Add" button
+  Widget _buildAddButton() {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        icon: const Icon(Icons.person_add),
+        label: const Text('Tambah Data Guru', style: TextStyle(fontWeight: FontWeight.bold)),
+        onPressed: _showAddForm,
       ),
     );
   }
@@ -294,23 +333,16 @@ class _PageGuruState extends State<PageGuru> {
                         ),
                 ),
                 DataCell(Row(children: [
-                  _buildAction(
-                    Icons.edit, 
-                    'Edit', 
+                  _buildActionButton(
+                    Icons.edit,
+                    'Edit',
                     Colors.blue,
                     onPressed: () => _showEditForm(s),
                   ),
                   const SizedBox(width: 8),
-                  _buildAction(
-                    Icons.person_add, 
-                    'Tambah', 
-                    Colors.green,
-                    onPressed: _showAddForm,
-                  ),
-                  const SizedBox(width: 8),
-                  _buildAction(
-                    Icons.delete, 
-                    'Hapus', 
+                  _buildActionButton(
+                    Icons.delete,
+                    'Hapus',
                     Colors.red,
                     onPressed: () => _showDeleteDialog(s),
                   ),
@@ -323,7 +355,7 @@ class _PageGuruState extends State<PageGuru> {
     );
   }
 
-  Widget _buildAction(IconData icon, String label, Color color, {VoidCallback? onPressed}) {
+  Widget _buildActionButton(IconData icon, String label, Color color, {VoidCallback? onPressed}) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.1),
@@ -352,9 +384,25 @@ class _FormTambahGuruState extends State<FormTambahGuru> {
   final _formKey = GlobalKey<FormState>();
   final _namaController = TextEditingController();
   final _emailController = TextEditingController();
-  final _roleController = TextEditingController();
-  final _kelasController = TextEditingController();
   final _avatarController = TextEditingController();
+
+  String? _selectedRole;
+  String? _selectedKelas;
+
+  final List<String> _roleOptions = [
+    'Guru',
+    'Admin'
+  ];
+
+  final List<String> _kelasOptions = [
+    '7A',
+    '7B',
+    '8A',
+    '8B',
+    '9A',
+    '9B',
+    'Tidak Mengampu Kelas'
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -396,28 +444,50 @@ class _FormTambahGuruState extends State<FormTambahGuru> {
             },
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _roleController,
+          DropdownButtonFormField<String>(
+            value: _selectedRole,
             decoration: const InputDecoration(
-              labelText: 'Role',
+              labelText: 'Role *',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.work),
             ),
+            items: _roleOptions.map((String role) {
+              return DropdownMenuItem<String>(
+                value: role,
+                child: Text(role),
+              );
+            }).toList(),
+            onChanged: (String? newValue) {
+              setState(() {
+                _selectedRole = newValue;
+              });
+            },
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Role harus diisi';
+                return 'Role harus dipilih';
               }
               return null;
             },
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _kelasController,
+          DropdownButtonFormField<String>(
+            value: _selectedKelas,
             decoration: const InputDecoration(
               labelText: 'Kelas Diampu',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.class_),
             ),
+            items: _kelasOptions.map((String kelas) {
+              return DropdownMenuItem<String>(
+                value: kelas,
+                child: Text(kelas),
+              );
+            }).toList(),
+            onChanged: (String? newValue) {
+              setState(() {
+                _selectedKelas = newValue;
+              });
+            },
           ),
           const SizedBox(height: 16),
           TextFormField(
@@ -453,26 +523,24 @@ class _FormTambahGuruState extends State<FormTambahGuru> {
   }
 
   void _submitForm() {
-    if (_formKey.currentState!.validate()) {
-      final data = {
-        'nama': _namaController.text,
-        'email': _emailController.text,
-        'role': _roleController.text,
-        'kelas_diampu': _kelasController.text,
-        'avatar_url': _avatarController.text.isEmpty ? null : _avatarController.text,
-        'created_at': DateTime.now().toIso8601String(),
-      };
-      
-      widget.onSave(data);
-    }
+  if (_formKey.currentState!.validate()) {
+    final data = {
+      'nama': _namaController.text,
+      'email': _emailController.text,
+      // Convert the role to lowercase to match the enum definition
+      'role': _selectedRole?.toLowerCase() ?? 'guru',
+      'kelas_diampu': _selectedKelas ?? 'Tidak Mengampu Kelas',
+      'avatar_url': _avatarController.text.isEmpty ? null : _avatarController.text,
+    };
+
+    widget.onSave(data);
   }
+}
 
   @override
   void dispose() {
     _namaController.dispose();
     _emailController.dispose();
-    _roleController.dispose();
-    _kelasController.dispose();
     _avatarController.dispose();
     super.dispose();
   }
@@ -492,11 +560,43 @@ class _FormEditGuruState extends State<FormEditGuru> {
   final _formKey = GlobalKey<FormState>();
   late final _namaController = TextEditingController(text: widget.data['nama'] ?? '');
   late final _emailController = TextEditingController(text: widget.data['email'] ?? '');
-  late final _roleController = TextEditingController(text: widget.data['role'] ?? '');
-  late final _kelasController = TextEditingController(
-      text: widget.data['kelas_diampu']?.toString() ?? '');
-  late final _avatarController = TextEditingController(
-      text: widget.data['avatar_url']?.toString() ?? '');
+  late final _avatarController = TextEditingController(text: widget.data['avatar_url']?.toString() ?? '');
+
+  String? _selectedRole;
+  List<String> _selectedKelas = []; // CHANGE: Now a list
+
+  final List<String> _roleOptions = [
+    'Guru',
+    'Admin'
+  ];
+
+  final List<String> _kelasOptions = [
+    '7A',
+    '7B',
+    '8A',
+    '8B',
+    '9A',
+    '9B',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Initialize role
+    final roleData = widget.data['role'];
+    if (roleData != null && _roleOptions.contains(roleData.toString())) {
+      _selectedRole = roleData.toString();
+    } else {
+      _selectedRole = 'Guru';
+    }
+    
+    // Initialize selected classes
+    final kelasData = widget.data['kelas_diampu'];
+    if (kelasData != null && kelasData is List) {
+      _selectedKelas = List<String>.from(kelasData);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -538,30 +638,53 @@ class _FormEditGuruState extends State<FormEditGuru> {
             },
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _roleController,
+          
+          DropdownButtonFormField<String>(
+            value: _selectedRole,
             decoration: const InputDecoration(
               labelText: 'Role',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.work),
             ),
+            items: _roleOptions.map((String role) {
+              return DropdownMenuItem<String>(
+                value: role,
+                child: Text(role),
+              );
+            }).toList(),
+            onChanged: (String? newValue) {
+              setState(() {
+                _selectedRole = newValue;
+              });
+            },
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Role harus diisi';
+                return 'Role harus dipilih';
               }
               return null;
             },
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _kelasController,
-            decoration: const InputDecoration(
-              labelText: 'Kelas Diampu',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.class_),
+          
+          // CHANGE: Replaced with a multi-select widget
+          MultiSelectDialogField(
+            initialValue: _selectedKelas,
+            items: _kelasOptions.map((kelas) => MultiSelectItem<String>(kelas, kelas)).toList(),
+            onConfirm: (List<String> values) {
+              setState(() {
+                _selectedKelas = values;
+              });
+            },
+            title: const Text('Pilih Kelas Diampu'),
+            buttonText: const Text('Pilih Kelas'),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey, width: 1.0),
+              borderRadius: BorderRadius.circular(5.0),
             ),
+            buttonIcon: const Icon(Icons.class_),
           ),
           const SizedBox(height: 16),
+          
           TextFormField(
             controller: _avatarController,
             decoration: const InputDecoration(
@@ -594,28 +717,32 @@ class _FormEditGuruState extends State<FormEditGuru> {
     );
   }
 
-  void _submitForm() {
-    if (_formKey.currentState!.validate()) {
-      final data = {
-        ...widget.data,
-        'nama': _namaController.text,
-        'email': _emailController.text,
-        'role': _roleController.text,
-        'kelas_diampu': _kelasController.text,
-        'avatar_url': _avatarController.text.isEmpty ? null : _avatarController.text,
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-      
-      widget.onSave(data);
-    }
-  }
+ void _submitForm() {
+  if (_formKey.currentState!.validate()) {
+    dynamic kelasDiampuValue;
 
+    if (_selectedKelas.isEmpty) {
+      kelasDiampuValue = null; 
+    } else {
+      kelasDiampuValue = _selectedKelas.map((kelas) => "Kelas $kelas").toList();
+    }
+
+    final data = {
+      'id': widget.data['id'],
+      'nama': _namaController.text,
+      'email': _emailController.text,
+      'role': _selectedRole?.toLowerCase() ?? 'guru',
+      'kelas_diampu': kelasDiampuValue, 
+      'avatar_url': _avatarController.text.isEmpty ? null : _avatarController.text,
+    };
+
+    widget.onSave(data);
+  }
+}
   @override
   void dispose() {
     _namaController.dispose();
     _emailController.dispose();
-    _roleController.dispose();
-    _kelasController.dispose();
     _avatarController.dispose();
     super.dispose();
   }
