@@ -1,9 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
+
+// Model data untuk Kelas (tidak berubah)
+class Kelas {
+  final String id;
+  final String nama;
+
+  Kelas({required this.id, required this.nama});
+
+  Map<String, dynamic> toJson() => {'id': id, 'nama': nama};
+
+  factory Kelas.fromJson(Map<String, dynamic> json) => Kelas(
+    id: json['id'] as String? ?? '',
+    nama: json['nama'] as String? ?? '',
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Kelas && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
 class PageGuru extends StatefulWidget {
   final String schoolName;
-
   const PageGuru({super.key, required this.schoolName});
 
   @override
@@ -22,12 +47,12 @@ class _PageGuruState extends State<PageGuru> {
   }
 
   Future<void> fetchGuru() async {
-    if (mounted) {
-      setState(() => isLoading = true);
-    }
+    if (mounted) setState(() => isLoading = true);
     try {
-      final response = await supabase.from('guru').select();
-
+      final response = await supabase
+          .from('guru')
+          .select()
+          .order('nama', ascending: true);
       if (mounted) {
         setState(() {
           guruData = List<Map<String, dynamic>>.from(response);
@@ -35,113 +60,71 @@ class _PageGuruState extends State<PageGuru> {
         });
       }
     } catch (e) {
-      print('Error fetching data: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Terjadi error: $e"),
-          backgroundColor: Colors.red,
-        ));
-        setState(() {
-          isLoading = false;
-        });
+        _showErrorSnackbar("Gagal memuat data guru: $e");
+        setState(() => isLoading = false);
       }
     }
   }
 
-  void _showAddForm() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.person_add, color: Colors.blue),
-            SizedBox(width: 8),
-            Text('Tambah Data Guru'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: FormTambahGuru(
-            onSave: (data) async {
-              try {
-                await supabase.from('guru').insert(data);
-                Navigator.of(context).pop();
-                fetchGuru();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Data guru ${data['nama']} berhasil ditambahkan'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-          ),
-        ),
+  void _showErrorSnackbar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
       ),
     );
   }
 
-  void _showEditForm(Map<String, dynamic> guru) {
+  void _showSuccessSnackbar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
+    );
+  }
+
+  void _showFormDialog({Map<String, dynamic>? guru}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.edit, color: Colors.blue),
-            SizedBox(width: 8),
-            Text('Edit Data Guru'),
+            Icon(
+              guru == null ? Icons.person_add : Icons.edit,
+              color: Colors.blue,
+            ),
+            const SizedBox(width: 8),
+            Text(guru == null ? 'Tambah Data Guru' : 'Edit Data Guru'),
           ],
         ),
-        content: SingleChildScrollView(
-          child: FormEditGuru(
-            data: guru,
-            onSave: (data) async {
-              try {
-                final id = data['id'];
-                if (id == null) throw 'ID guru tidak ditemukan';
-
-                await supabase
-                    .from('guru')
-                    .update({
-                      'nama': data['nama'],
-                      'email': data['email'],
-                      'role': data['role'],
-                      'kelas_diampu': data['kelas_diampu'],
-                      'avatar_url': data['avatar_url'],
-                    })
-                    .eq('id', id);
-
-                Navigator.of(context).pop();
-                fetchGuru();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Data guru ${data['nama']} berhasil diupdate'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+        content: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.4,
+          child: SingleChildScrollView(
+            child: FormGuru(
+              initialData: guru,
+              onSave: (data) async {
+                try {
+                  if (guru == null) {
+                    await supabase.from('guru').insert(data);
+                    _showSuccessSnackbar(
+                      'Data guru ${data['nama']} berhasil ditambahkan',
+                    );
+                  } else {
+                    final id = guru['id'];
+                    await supabase.from('guru').update(data).eq('id', id);
+                    _showSuccessSnackbar(
+                      'Data guru ${data['nama']} berhasil diupdate',
+                    );
+                  }
+                  if (mounted) Navigator.of(context).pop();
+                  fetchGuru();
+                } catch (e) {
+                  // Tidak perlu pop di sini karena error akan ditangani di dalam form
+                  _showErrorSnackbar("Terjadi kesalahan: $e");
                 }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
+              },
+            ),
           ),
         ),
       ),
@@ -164,32 +147,25 @@ class _PageGuruState extends State<PageGuru> {
             onPressed: () async {
               try {
                 final id = guru['id'];
-                if (id == null) throw 'ID guru tidak ditemukan';
+                await supabase.from('guru').delete().eq('id', id);
 
-                await supabase
-                    .from('guru')
-                    .delete()
-                    .eq('id', id);
+                // Hapus juga avatar dari storage jika ada
+                final avatarUrl = guru['avatar_url'] as String?;
+                if (avatarUrl != null && avatarUrl.isNotEmpty) {
+                  final fileName = avatarUrl.split('/').last;
+                  await supabase.storage.from('avatars').remove([
+                    'public/$fileName',
+                  ]);
+                }
 
-                Navigator.of(context).pop();
+                if (mounted) Navigator.of(context).pop();
+                _showSuccessSnackbar(
+                  'Data guru ${guru['nama']} berhasil dihapus',
+                );
                 fetchGuru();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Data guru ${guru['nama']} berhasil dihapus'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
               } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
+                if (mounted) Navigator.of(context).pop();
+                _showErrorSnackbar("Gagal menghapus data: $e");
               }
             },
             child: const Text('Hapus', style: TextStyle(color: Colors.white)),
@@ -225,13 +201,16 @@ class _PageGuruState extends State<PageGuru> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[500]!]),
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.blue[500]!],
+        ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.blue.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4))
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Row(
@@ -240,7 +219,10 @@ class _PageGuruState extends State<PageGuru> {
           const Text(
             'Data Guru',
             style: TextStyle(
-                fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           Row(
             children: [
@@ -256,8 +238,7 @@ class _PageGuruState extends State<PageGuru> {
       ),
     );
   }
-  
-  // New widget for the "Add" button
+
   Widget _buildAddButton() {
     return Align(
       alignment: Alignment.centerRight,
@@ -267,11 +248,16 @@ class _PageGuruState extends State<PageGuru> {
           foregroundColor: Colors.white,
           elevation: 2,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
         icon: const Icon(Icons.person_add),
-        label: const Text('Tambah Data Guru', style: TextStyle(fontWeight: FontWeight.bold)),
-        onPressed: _showAddForm,
+        label: const Text(
+          'Tambah Data Guru',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        onPressed: () => _showFormDialog(),
       ),
     );
   }
@@ -285,7 +271,6 @@ class _PageGuruState extends State<PageGuru> {
         ),
       );
     }
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -294,9 +279,10 @@ class _PageGuruState extends State<PageGuru> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.grey.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 2))
+            color: Colors.grey.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: SingleChildScrollView(
@@ -309,45 +295,93 @@ class _PageGuruState extends State<PageGuru> {
             dataRowHeight: 64,
             headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
             columns: const [
-              DataColumn(label: Text('Nama', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Role', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Kelas Diampu', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Avatar', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                label: Text(
+                  'Nama',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Email',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Role',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Kelas Diampu',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Avatar',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Aksi',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
             rows: List.generate(guruData.length, (i) {
-              final s = guruData[i];
-              return DataRow(cells: [
-                DataCell(Text(s['nama'] ?? '-')),
-                DataCell(Text(s['email'] ?? '-')),
-                DataCell(Text(s['role'] ?? '-')),
-                DataCell(Text(s['kelas_diampu']?.toString() ?? '-')),
-                DataCell(
-                  s['avatar_url'] != null && s['avatar_url'].isNotEmpty
-                      ? CircleAvatar(
-                          backgroundImage: NetworkImage(s['avatar_url']),
-                        )
-                      : const CircleAvatar(
-                          child: Icon(Icons.person),
+              final guru = guruData[i];
+
+              final dynamic data = guru['kelas_diampu'];
+              List<String> semuaKelas = [];
+              if (data is Map<String, dynamic>) {
+                data.forEach((key, value) {
+                  if (value is List) {
+                    semuaKelas.addAll(value.cast<String>());
+                  }
+                });
+              }
+              final kelasDiampuText = semuaKelas.isNotEmpty
+                  ? semuaKelas.join(', ')
+                  : '-';
+
+              return DataRow(
+                cells: [
+                  DataCell(Text(guru['nama'] ?? '-')),
+                  DataCell(Text(guru['email'] ?? '-')),
+                  DataCell(Text(guru['role'] ?? '-')),
+                  DataCell(Text(kelasDiampuText)),
+                  DataCell(
+                    guru['avatar_url'] != null && guru['avatar_url'].isNotEmpty
+                        ? CircleAvatar(
+                            backgroundImage: NetworkImage(guru['avatar_url']),
+                          )
+                        : const CircleAvatar(child: Icon(Icons.person)),
+                  ),
+                  DataCell(
+                    Row(
+                      children: [
+                        _buildActionButton(
+                          Icons.edit,
+                          'Edit',
+                          Colors.blue,
+                          onPressed: () => _showFormDialog(guru: guru),
                         ),
-                ),
-                DataCell(Row(children: [
-                  _buildActionButton(
-                    Icons.edit,
-                    'Edit',
-                    Colors.blue,
-                    onPressed: () => _showEditForm(s),
+                        const SizedBox(width: 8),
+                        _buildActionButton(
+                          Icons.delete,
+                          'Hapus',
+                          Colors.red,
+                          onPressed: () => _showDeleteDialog(guru),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  _buildActionButton(
-                    Icons.delete,
-                    'Hapus',
-                    Colors.red,
-                    onPressed: () => _showDeleteDialog(s),
-                  ),
-                ])),
-              ]);
+                ],
+              );
             }),
           ),
         ),
@@ -355,7 +389,12 @@ class _PageGuruState extends State<PageGuru> {
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, Color color, {VoidCallback? onPressed}) {
+  Widget _buildActionButton(
+    IconData icon,
+    String label,
+    Color color, {
+    VoidCallback? onPressed,
+  }) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.1),
@@ -365,44 +404,165 @@ class _PageGuruState extends State<PageGuru> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       icon: Icon(icon, size: 16),
-      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
       onPressed: onPressed,
     );
   }
 }
 
-class FormTambahGuru extends StatefulWidget {
+class FormGuru extends StatefulWidget {
+  final Map<String, dynamic>? initialData;
   final Function(Map<String, dynamic>) onSave;
 
-  const FormTambahGuru({super.key, required this.onSave});
+  const FormGuru({super.key, this.initialData, required this.onSave});
 
   @override
-  State<FormTambahGuru> createState() => _FormTambahGuruState();
+  State<FormGuru> createState() => _FormGuruState();
 }
 
-class _FormTambahGuruState extends State<FormTambahGuru> {
+class _FormGuruState extends State<FormGuru> {
   final _formKey = GlobalKey<FormState>();
-  final _namaController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _avatarController = TextEditingController();
+  final SupabaseClient supabase = Supabase.instance.client;
+  late final TextEditingController _namaController;
+  late final TextEditingController _emailController;
 
   String? _selectedRole;
-  String? _selectedKelas;
+  List<Kelas> _selectedKelas = [];
+  bool _isUploading = false;
 
-  final List<String> _roleOptions = [
-    'Guru',
-    'Admin'
-  ];
+  // PERUBAHAN: State untuk menangani gambar
+  Uint8List? _avatarBytes;
+  String? _existingAvatarUrl;
 
-  final List<String> _kelasOptions = [
-    '7A',
-    '7B',
-    '8A',
-    '8B',
-    '9A',
-    '9B',
-    'Tidak Mengampu Kelas'
+  final List<String> _roleOptions = ['guru', 'admin'];
+  final List<Kelas> _kelasOptions = [
+    Kelas(id: '7A', nama: 'Kelas 7A'),
+    Kelas(id: '7B', nama: 'Kelas 7B'),
+    Kelas(id: '8A', nama: 'Kelas 8A'),
+    Kelas(id: '8B', nama: 'Kelas 8B'),
+    Kelas(id: '9A', nama: 'Kelas 9A'),
+    Kelas(id: '9B', nama: 'Kelas 9B'),
   ];
+  late final Map<String, Kelas> _kelasLookup;
+
+  @override
+  void initState() {
+    super.initState();
+    _kelasLookup = {for (var k in _kelasOptions) k.nama: k};
+
+    final data = widget.initialData;
+    _namaController = TextEditingController(text: data?['nama'] ?? '');
+    _emailController = TextEditingController(text: data?['email'] ?? '');
+    _selectedRole = data?['role'] ?? 'guru';
+    _existingAvatarUrl = data?['avatar_url'];
+
+    final dynamic kelasData = data?['kelas_diampu'];
+    if (kelasData is Map<String, dynamic>) {
+      final Map<String, dynamic> kelasDiampuMap = kelasData;
+      List<Kelas> initialKelas = [];
+      kelasDiampuMap.forEach((key, value) {
+        if (value is List) {
+          for (final String kelasNama in value.cast<String>()) {
+            if (_kelasLookup.containsKey(kelasNama)) {
+              initialKelas.add(_kelasLookup[kelasNama]!);
+            }
+          }
+        }
+      });
+      _selectedKelas = initialKelas;
+    }
+  }
+
+  @override
+  void dispose() {
+    _namaController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  // BARU: Fungsi untuk memilih gambar
+  Future<void> _pickAvatar() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      setState(() {
+        _avatarBytes = bytes;
+      });
+    }
+  }
+
+  Future<void> _submitForm() async {
+    if (_isUploading) return; // Mencegah double-submit
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isUploading = true;
+      });
+
+      try {
+        String? avatarUrl = _existingAvatarUrl;
+
+        // Jika ada gambar baru yang dipilih, unggah ke storage
+        if (_avatarBytes != null) {
+          final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+          // Simpan di dalam folder public agar URLnya bisa diakses
+          final filePath = 'public/$fileName';
+
+          await supabase.storage
+              .from('avatars') // Nama bucket Anda
+              .uploadBinary(
+                filePath,
+                _avatarBytes!,
+                fileOptions: const FileOptions(
+                  cacheControl: '3600', // Cache 1 jam
+                  upsert: false,
+                ),
+              );
+
+          avatarUrl = supabase.storage.from('avatars').getPublicUrl(filePath);
+        }
+
+        Map<String, List<String>> groupedKelas = {};
+        for (final kelas in _selectedKelas) {
+          String tingkat = "Kelas ${kelas.id[0]}";
+          if (!groupedKelas.containsKey(tingkat)) {
+            groupedKelas[tingkat] = [];
+          }
+          groupedKelas[tingkat]!.add(kelas.nama);
+        }
+
+        groupedKelas.forEach((key, value) => value.sort());
+
+        final dataToSave = {
+          'nama': _namaController.text,
+          'email': _emailController.text,
+          'role': _selectedRole,
+          'kelas_diampu': groupedKelas,
+          'avatar_url': avatarUrl,
+        };
+        widget.onSave(dataToSave);
+      } catch (e) {
+        // Tampilkan error jika upload gagal
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Gagal mengunggah foto: $e"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isUploading = false;
+          });
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -411,6 +571,9 @@ class _FormTambahGuruState extends State<FormTambahGuru> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // PERUBAHAN: Widget untuk memilih dan menampilkan avatar
+          _buildAvatarPicker(),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _namaController,
             decoration: const InputDecoration(
@@ -418,12 +581,8 @@ class _FormTambahGuruState extends State<FormTambahGuru> {
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.person),
             ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Nama guru harus diisi';
-              }
-              return null;
-            },
+            validator: (v) =>
+                v == null || v.isEmpty ? 'Nama harus diisi' : null,
           ),
           const SizedBox(height: 16),
           TextFormField(
@@ -433,13 +592,9 @@ class _FormTambahGuruState extends State<FormTambahGuru> {
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.email),
             ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Email harus diisi';
-              }
-              if (!value.contains('@')) {
-                return 'Email tidak valid';
-              }
+            validator: (v) {
+              if (v == null || v.isEmpty) return 'Email harus diisi';
+              if (!v.contains('@')) return 'Email tidak valid';
               return null;
             },
           ),
@@ -447,56 +602,42 @@ class _FormTambahGuruState extends State<FormTambahGuru> {
           DropdownButtonFormField<String>(
             value: _selectedRole,
             decoration: const InputDecoration(
-              labelText: 'Role *',
+              labelText: 'Role',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.work),
             ),
-            items: _roleOptions.map((String role) {
-              return DropdownMenuItem<String>(
-                value: role,
-                child: Text(role),
-              );
-            }).toList(),
-            onChanged: (String? newValue) {
-              setState(() {
-                _selectedRole = newValue;
-              });
-            },
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Role harus dipilih';
-              }
-              return null;
-            },
+            items: _roleOptions
+                .map(
+                  (role) =>
+                      DropdownMenuItem<String>(value: role, child: Text(role)),
+                )
+                .toList(),
+            onChanged: (val) => setState(() => _selectedRole = val),
+            validator: (v) => v == null ? 'Role harus dipilih' : null,
           ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            value: _selectedKelas,
-            decoration: const InputDecoration(
-              labelText: 'Kelas Diampu',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.class_),
+          MultiSelectChipField<Kelas?>(
+            items: _kelasOptions
+                .map((kelas) => MultiSelectItem<Kelas>(kelas, kelas.nama))
+                .toList(),
+            initialValue: _selectedKelas,
+            title: const Text("Kelas Diampu"),
+            headerColor: Colors.blue.withOpacity(0.1),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade400, width: 1.8),
+              borderRadius: BorderRadius.circular(4),
             ),
-            items: _kelasOptions.map((String kelas) {
-              return DropdownMenuItem<String>(
-                value: kelas,
-                child: Text(kelas),
-              );
-            }).toList(),
-            onChanged: (String? newValue) {
-              setState(() {
-                _selectedKelas = newValue;
-              });
+            selectedChipColor: Colors.blue.withOpacity(0.5),
+            selectedTextStyle: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
+            chipShape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            onTap: (values) {
+              _selectedKelas = values.whereType<Kelas>().toList();
             },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _avatarController,
-            decoration: const InputDecoration(
-              labelText: 'URL Avatar (opsional)',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.image),
-            ),
           ),
           const SizedBox(height: 24),
           Row(
@@ -513,7 +654,17 @@ class _FormTambahGuruState extends State<FormTambahGuru> {
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Simpan'),
+                // Menampilkan loading indicator saat upload
+                child: _isUploading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text('Simpan'),
               ),
             ],
           ),
@@ -522,228 +673,31 @@ class _FormTambahGuruState extends State<FormTambahGuru> {
     );
   }
 
-  void _submitForm() {
-  if (_formKey.currentState!.validate()) {
-    final data = {
-      'nama': _namaController.text,
-      'email': _emailController.text,
-      // Convert the role to lowercase to match the enum definition
-      'role': _selectedRole?.toLowerCase() ?? 'guru',
-      'kelas_diampu': _selectedKelas ?? 'Tidak Mengampu Kelas',
-      'avatar_url': _avatarController.text.isEmpty ? null : _avatarController.text,
-    };
-
-    widget.onSave(data);
-  }
-}
-
-  @override
-  void dispose() {
-    _namaController.dispose();
-    _emailController.dispose();
-    _avatarController.dispose();
-    super.dispose();
-  }
-}
-
-class FormEditGuru extends StatefulWidget {
-  final Map<String, dynamic> data;
-  final Function(Map<String, dynamic>) onSave;
-
-  const FormEditGuru({super.key, required this.data, required this.onSave});
-
-  @override
-  State<FormEditGuru> createState() => _FormEditGuruState();
-}
-
-class _FormEditGuruState extends State<FormEditGuru> {
-  final _formKey = GlobalKey<FormState>();
-  late final _namaController = TextEditingController(text: widget.data['nama'] ?? '');
-  late final _emailController = TextEditingController(text: widget.data['email'] ?? '');
-  late final _avatarController = TextEditingController(text: widget.data['avatar_url']?.toString() ?? '');
-
-  String? _selectedRole;
-  List<String> _selectedKelas = []; // CHANGE: Now a list
-
-  final List<String> _roleOptions = [
-    'Guru',
-    'Admin'
-  ];
-
-  final List<String> _kelasOptions = [
-    '7A',
-    '7B',
-    '8A',
-    '8B',
-    '9A',
-    '9B',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    
-    // Initialize role
-    final roleData = widget.data['role'];
-    if (roleData != null && _roleOptions.contains(roleData.toString())) {
-      _selectedRole = roleData.toString();
-    } else {
-      _selectedRole = 'Guru';
+  // BARU: Widget untuk UI pemilihan avatar
+  Widget _buildAvatarPicker() {
+    ImageProvider? imageProvider;
+    if (_avatarBytes != null) {
+      imageProvider = MemoryImage(_avatarBytes!);
+    } else if (_existingAvatarUrl != null && _existingAvatarUrl!.isNotEmpty) {
+      imageProvider = NetworkImage(_existingAvatarUrl!);
     }
-    
-    // Initialize selected classes
-    final kelasData = widget.data['kelas_diampu'];
-    if (kelasData != null && kelasData is List) {
-      _selectedKelas = List<String>.from(kelasData);
-    }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextFormField(
-            controller: _namaController,
-            decoration: const InputDecoration(
-              labelText: 'Nama Guru',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.person),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Nama guru harus diisi';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _emailController,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.email),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Email harus diisi';
-              }
-              if (!value.contains('@')) {
-                return 'Email tidak valid';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          
-          DropdownButtonFormField<String>(
-            value: _selectedRole,
-            decoration: const InputDecoration(
-              labelText: 'Role',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.work),
-            ),
-            items: _roleOptions.map((String role) {
-              return DropdownMenuItem<String>(
-                value: role,
-                child: Text(role),
-              );
-            }).toList(),
-            onChanged: (String? newValue) {
-              setState(() {
-                _selectedRole = newValue;
-              });
-            },
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Role harus dipilih';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          
-          // CHANGE: Replaced with a multi-select widget
-          MultiSelectDialogField(
-            initialValue: _selectedKelas,
-            items: _kelasOptions.map((kelas) => MultiSelectItem<String>(kelas, kelas)).toList(),
-            onConfirm: (List<String> values) {
-              setState(() {
-                _selectedKelas = values;
-              });
-            },
-            title: const Text('Pilih Kelas Diampu'),
-            buttonText: const Text('Pilih Kelas'),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey, width: 1.0),
-              borderRadius: BorderRadius.circular(5.0),
-            ),
-            buttonIcon: const Icon(Icons.class_),
-          ),
-          const SizedBox(height: 16),
-          
-          TextFormField(
-            controller: _avatarController,
-            decoration: const InputDecoration(
-              labelText: 'URL Avatar',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.image),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Batal'),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _submitForm,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Update'),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return Column(
+      children: [
+        CircleAvatar(
+          radius: 50,
+          backgroundImage: imageProvider,
+          child: imageProvider == null
+              ? const Icon(Icons.person, size: 50)
+              : null,
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          icon: const Icon(Icons.upload_file),
+          label: const Text('Ubah Foto'),
+          onPressed: _pickAvatar,
+        ),
+      ],
     );
-  }
-
- void _submitForm() {
-  if (_formKey.currentState!.validate()) {
-    dynamic kelasDiampuValue;
-
-    if (_selectedKelas.isEmpty) {
-      kelasDiampuValue = null; 
-    } else {
-      kelasDiampuValue = _selectedKelas.map((kelas) => "Kelas $kelas").toList();
-    }
-
-    final data = {
-      'id': widget.data['id'],
-      'nama': _namaController.text,
-      'email': _emailController.text,
-      'role': _selectedRole?.toLowerCase() ?? 'guru',
-      'kelas_diampu': kelasDiampuValue, 
-      'avatar_url': _avatarController.text.isEmpty ? null : _avatarController.text,
-    };
-
-    widget.onSave(data);
-  }
-}
-  @override
-  void dispose() {
-    _namaController.dispose();
-    _emailController.dispose();
-    _avatarController.dispose();
-    super.dispose();
   }
 }
