@@ -1,4 +1,4 @@
-// page_absensi.dart
+// data_absensi.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -29,10 +29,13 @@ class _PageAbsensiState extends State<PageAbsensi> {
   }
 
   Future<void> fetchAbsensi() async {
-    setState(() => isLoading = true);
+    // Cek mounted sebelum setState untuk menghindari error
+    if (mounted) {
+      setState(() => isLoading = true);
+    }
+    
     debugLog('Mulai fetch absensi dari Supabase...');
     try {
-      // Query sesuai schema: ambil relasi siswa(nama) dan guru(nama)
       final response = await supabase.from('absensi').select('''
         id,
         siswa_id,
@@ -46,75 +49,86 @@ class _PageAbsensiState extends State<PageAbsensi> {
         guru (nama),
         created_at,
         updated_at
-      ''');
+      ''').order('tanggal', ascending: false).order('created_at', ascending: false); // Urutkan
 
-      debugLog('Raw response type: ${response.runtimeType}');
-      if (response is List) {
-        absensiData = List<Map<String, dynamic>>.from(response.map((e) => Map<String, dynamic>.from(e as Map)));
-        debugLog('Data absensi berhasil dimuat: ${absensiData.length} baris');
-      } else {
-        debugLog('Response bukan list. Isi response: $response');
-        absensiData = [];
-      }
+      absensiData = response; 
+      debugLog('Data absensi berhasil dimuat: ${absensiData.length} baris');
     } catch (e, st) {
       debugLog('Error saat fetchAbsensi: $e');
       debugLog('Stack: $st');
       absensiData = [];
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal memuat data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      setState(() => isLoading = false);
-    }
-  }
-
-  String fmtDate(dynamic value) {
-    if (value == null) return '-';
-    try {
-      DateTime dt;
-      if (value is DateTime) {
-        dt = value;
-      } else {
-        dt = DateTime.parse(value.toString());
+      if (mounted) {
+        setState(() => isLoading = false);
       }
-      return DateFormat('dd-MM-yyyy').format(dt);
-    } catch (e) {
-      debugLog('fmtDate error for value=$value -> $e');
-      return value.toString();
     }
   }
 
-  String fmtDateTime(dynamic value) {
-    if (value == null) return '-';
+  // Helper untuk parsing DateTime
+  DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
     try {
-      DateTime dt;
       if (value is DateTime) {
-        dt = value;
-      } else {
-        dt = DateTime.parse(value.toString());
+        return value;
       }
-      return DateFormat('dd-MM-yyyy HH:mm').format(dt.toLocal());
+      return DateTime.parse(value.toString());
     } catch (e) {
-      debugLog('fmtDateTime error for value=$value -> $e');
-      return value.toString();
+      debugLog('_parseDateTime error for value=$value -> $e');
+      return null;
     }
   }
 
-  String fmtTime(dynamic value) {
-    if (value == null) return '-';
+  // BARU: Helper untuk parsing TimeOfDay dari string (misal: "14:00:00")
+  TimeOfDay? _parseTimeOfDay(dynamic value) {
+    if (value == null) return null;
     try {
       final s = value.toString();
       final parts = s.split(':');
       if (parts.length >= 2) {
-        return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
-      } else {
-        return s;
+        return TimeOfDay(
+          hour: int.parse(parts[0]),
+          minute: int.parse(parts[1]),
+        );
       }
+      return null;
     } catch (e) {
-      debugLog('fmtTime error for value=$value -> $e');
-      return value.toString();
+      debugLog('_parseTimeOfDay error for value=$value -> $e');
+      return null;
     }
+  }
+
+  // Helper format
+  String fmtDate(dynamic value) {
+    final dt = _parseDateTime(value);
+    if (dt == null) return '-';
+    return DateFormat('dd-MM-yyyy').format(dt);
+  }
+
+  String fmtDateTime(dynamic value) {
+    final dt = _parseDateTime(value);
+    if (dt == null) return '-';
+    return DateFormat('dd-MM-yyyy HH:mm').format(dt.toLocal());
+  }
+
+  String fmtTime(dynamic value) {
+    final tod = _parseTimeOfDay(value);
+    if (tod == null) return '-';
+    // Gunakan context untuk format 24 jam (atau 12 jam sesuai locale)
+    // Tapi untuk konsistensi, kita format manual saja ke HH:mm
+    return '${tod.hour.toString().padLeft(2, '0')}:${tod.minute.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
+    // ... (build, _buildHeader tetap sama) ...
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: SingleChildScrollView(
@@ -167,10 +181,20 @@ class _PageAbsensiState extends State<PageAbsensi> {
 
   Widget _buildTable() {
     if (absensiData.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Text('Tidak ada data absensi ditemukan.'),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              const Text('Tidak ada data absensi ditemukan.'),
+              const SizedBox(height: 10),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.refresh),
+                label: const Text('Muat Ulang'),
+                onPressed: fetchAbsensi,
+              )
+            ],
+          ),
         ),
       );
     }
@@ -220,12 +244,12 @@ class _PageAbsensiState extends State<PageAbsensi> {
                 DataCell(Text(masuk)),
                 DataCell(Text(pulang)),
                 DataCell(Text(keterangan)),
-                // Kolom Surat: schema tidak punya surat_url -> tampil '-'
                 const DataCell(Text('-')),
                 DataCell(Row(children: [
                   _buildAction(Icons.edit, 'Edit', Colors.blue, onPressed: () {
                     debugLog('Edit pressed for id=${a['id']}');
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Edit: fitur belum diimplementasikan')));
+                    // DIUBAH: Panggil bottom sheet edit
+                    _showEditBottomSheet(context, a);
                   }),
                   const SizedBox(width: 8),
                   _buildAction(Icons.visibility, 'Detail', Colors.blue.shade700, onPressed: () {
@@ -242,6 +266,7 @@ class _PageAbsensiState extends State<PageAbsensi> {
   }
 
   Widget _buildAction(IconData icon, String label, Color color, {required VoidCallback onPressed}) {
+    // ... (fungsi _buildAction tetap sama) ...
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.12),
@@ -256,9 +281,297 @@ class _PageAbsensiState extends State<PageAbsensi> {
     );
   }
 
-  void _showDetailBottomSheet(BuildContext context, Map<String, dynamic> a) {
+  // BARU: BOTTOM SHEET UNTUK EDIT DATA
+  void _showEditBottomSheet(BuildContext context, Map<String, dynamic> a) {
+    // Ambil data awal
     final String namaSiswa = (a['siswa'] is Map) ? (a['siswa']['nama'] ?? '-') : '-';
-    // Hanya ambil nama guru (jika ada). Jika null -> '-'
+    final TextEditingController keteranganController = TextEditingController(text: a['keterangan'] ?? '');
+
+    // Variabel state untuk form
+    String selectedStatus = a['status'] ?? 'hadir';
+    DateTime selectedTanggal = _parseDateTime(a['tanggal']) ?? DateTime.now();
+    TimeOfDay? waktuMasuk = _parseTimeOfDay(a['waktu_masuk']);
+    TimeOfDay? waktuPulang = _parseTimeOfDay(a['waktu_pulang']);
+    bool isSaving = false;
+
+    // Helper untuk showDatePicker
+    Future<void> pickDate(BuildContext context, StateSetter formSetState) async {
+      final newDate = await showDatePicker(
+        context: context,
+        initialDate: selectedTanggal,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100),
+      );
+      if (newDate != null) {
+        formSetState(() {
+          selectedTanggal = newDate;
+        });
+      }
+    }
+
+    // Helper untuk showTimePicker
+    Future<void> pickTime(BuildContext context, StateSetter formSetState, bool isMasuk) async {
+      final initialTime = (isMasuk ? waktuMasuk : waktuPulang) ?? TimeOfDay.now();
+      final newTime = await showTimePicker(
+        context: context,
+        initialTime: initialTime,
+      );
+      if (newTime != null) {
+        formSetState(() {
+          if (isMasuk) {
+            waktuMasuk = newTime;
+          } else {
+            waktuPulang = newTime;
+          }
+        });
+      }
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        // Gunakan StatefulBuilder agar state form (tanggal, status, dll)
+        // terpisah dari state utama halaman
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter formSetState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.9,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Column(
+                    children: [
+                      // Header
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade700,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.edit_note, color: Colors.white),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Edit Absensi: $namaSiswa',
+                                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              icon: const Icon(Icons.close, color: Colors.white),
+                            )
+                          ],
+                        ),
+                      ),
+
+                      // Body Form
+                      Expanded(
+                        child: SingleChildScrollView(
+                          controller: scrollController,
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Form Status
+                              DropdownButtonFormField<String>(
+                                value: selectedStatus,
+                                decoration: const InputDecoration(
+                                  labelText: 'Status Kehadiran',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.check_circle_outline),
+                                ),
+                                items: ['hadir', 'terlambat', 'sakit', 'izin', 'alfa']
+                                    .map((status) => DropdownMenuItem(
+                                          value: status,
+                                          child: Text(status.replaceFirst(status[0], status[0].toUpperCase())),
+                                        ))
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    formSetState(() {
+                                      selectedStatus = value;
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Form Tanggal
+                              ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(color: Colors.grey.shade400)
+                                ),
+                                leading: const Icon(Icons.calendar_today, color: Colors.blue),
+                                title: const Text('Tanggal Absensi'),
+                                subtitle: Text(DateFormat('EEEE, dd MMMM yyyy').format(selectedTanggal)),
+                                trailing: const Icon(Icons.arrow_drop_down),
+                                onTap: () => pickDate(context, formSetState),
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              // Form Waktu Masuk
+                              ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(color: Colors.grey.shade400)
+                                ),
+                                leading: const Icon(Icons.login, color: Colors.green),
+                                title: const Text('Waktu Masuk'),
+                                subtitle: Text(waktuMasuk?.format(context) ?? 'Belum diatur'),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if(waktuMasuk != null)
+                                    IconButton(
+                                      icon: const Icon(Icons.clear, size: 20, color: Colors.red),
+                                      onPressed: () => formSetState(() => waktuMasuk = null),
+                                    ),
+                                    const Icon(Icons.arrow_drop_down),
+                                  ],
+                                ),
+                                onTap: () => pickTime(context, formSetState, true),
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              // Form Waktu Pulang
+                              ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(color: Colors.grey.shade400)
+                                ),
+                                leading: const Icon(Icons.logout, color: Colors.red),
+                                title: const Text('Waktu Pulang'),
+                                subtitle: Text(waktuPulang?.format(context) ?? 'Belum diatur'),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if(waktuPulang != null)
+                                    IconButton(
+                                      icon: const Icon(Icons.clear, size: 20, color: Colors.red),
+                                      onPressed: () => formSetState(() => waktuPulang = null),
+                                    ),
+                                    const Icon(Icons.arrow_drop_down),
+                                  ],
+                                ),
+                                onTap: () => pickTime(context, formSetState, false),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Form Keterangan
+                              TextFormField(
+                                controller: keteranganController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Keterangan',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.note_alt_outlined),
+                                ),
+                                maxLines: 3,
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Tombol Simpan
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  icon: isSaving
+                                      ? Container(
+                                          width: 20,
+                                          height: 20,
+                                          margin: const EdgeInsets.only(right: 8),
+                                          child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.save),
+                                  label: Text(isSaving ? 'Menyimpan...' : 'Simpan Perubahan'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue.shade800,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: isSaving ? null : () async {
+                                    // 1. Set loading
+                                    formSetState(() => isSaving = true);
+                                    
+                                    // 2. Format data untuk Supabase
+                                    // Format tanggal: 'YYYY-MM-DD'
+                                    final String tgl = selectedTanggal.toIso8601String().split('T').first;
+                                    // Format waktu: 'HH:MM:SS'
+                                    final String? wMasuk = waktuMasuk != null ? '${waktuMasuk!.hour.toString().padLeft(2, '0')}:${waktuMasuk!.minute.toString().padLeft(2, '0')}:00' : null;
+                                    final String? wPulang = waktuPulang != null ? '${waktuPulang!.hour.toString().padLeft(2, '0')}:${waktuPulang!.minute.toString().padLeft(2, '0')}:00' : null;
+                                    
+                                    try {
+                                      // 3. Kirim ke Supabase
+                                      await supabase.from('absensi').update({
+                                        'tanggal': tgl,
+                                        'status': selectedStatus,
+                                        'waktu_masuk': wMasuk,
+                                        'waktu_pulang': wPulang,
+                                        'keterangan': keteranganController.text,
+                                        'updated_at': DateTime.now().toIso8601String(),
+                                        // 'updated_by' bisa diisi dengan ID user yg login jika ada
+                                      }).eq('id', a['id']);
+                                      
+                                      // 4. Tutup bottom sheet
+                                      if(context.mounted) Navigator.of(context).pop();
+                                      
+                                      // 5. Tampilkan snackbar sukses
+                                      if(context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Data absensi berhasil diperbarui'), backgroundColor: Colors.green),
+                                        );
+                                      }
+                                      
+                                      // 6. Muat ulang data di tabel
+                                      fetchAbsensi();
+
+                                    } catch (e) {
+                                      debugLog('Error update absensi: $e');
+                                      // Tampilkan snackbar error
+                                      if(context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Gagal memperbarui data: $e'), backgroundColor: Colors.red),
+                                        );
+                                      }
+                                    } finally {
+                                      // 7. Hentikan loading
+                                      formSetState(() => isSaving = false);
+                                    }
+                                  },
+                                ),
+                              )
+                            ],
+                          ),
+                        ),
+                      )
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ... (fungsi _showDetailBottomSheet dan _buildDetailRow tetap sama) ...
+  void _showDetailBottomSheet(BuildContext context, Map<String, dynamic> a) {
+    // Logika defensive Anda di sini sudah sangat bagus!
+    final String namaSiswa = (a['siswa'] is Map) ? (a['siswa']['nama'] ?? '-') : '-';
     final String guruNama = (a['guru'] is Map) ? (a['guru']['nama'] ?? '-') : '-';
     final String tanggal = fmtDate(a['tanggal']);
     final String status = a['status'] ?? '-';
@@ -286,7 +599,7 @@ class _PageAbsensiState extends State<PageAbsensi> {
               ),
               child: Column(
                 children: [
-                  // Header blue clean
+                  // Header
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                     decoration: BoxDecoration(
@@ -366,7 +679,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
                           // Details list
                           _buildDetailRow(Icons.note, 'Keterangan', keterangan),
                           const SizedBox(height: 8),
-                          // Hanya tampilkan nama guru (label: Diupdate oleh)
                           _buildDetailRow(Icons.edit, 'Diupdate oleh', guruNama),
                           const SizedBox(height: 8),
                           _buildDetailRow(Icons.calendar_today, 'Dibuat pada', createdAt),
