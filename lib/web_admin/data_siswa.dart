@@ -14,10 +14,8 @@ class DataSiswaPage extends StatefulWidget {
 class _DataSiswaPageState extends State<DataSiswaPage> {
   final SupabaseClient supabase = Supabase.instance.client;
 
-  // State loading untuk tabel utama (sudah ada)
   bool isLoading = true;
-  // --- 1. TAMBAHKAN STATE LOADING BARU ---
-  // State loading khusus untuk dropdown filter kelas
+ 
   bool isKelasLoading = true;
 
   List<Map<String, dynamic>> siswaData = [];
@@ -30,14 +28,11 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   @override
   void initState() {
     super.initState();
-    // Ambil ID kelas dari widget (jika ada)
     selectedKelasId = widget.initialKelasId;
-    // Mulai proses loading
     fetchKelas();
   }
 
   Future<void> fetchKelas() async {
-    // --- 2. PASTIKAN isKelasLoading = true DI AWAL ---
     if (!mounted) return;
     setState(() {
       isKelasLoading = true;
@@ -52,24 +47,20 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       if (!mounted) return;
       setState(() {
         kelasList = List<Map<String, dynamic>>.from(response);
-        // --- 3. SET isKelasLoading = false SETELAH DATA DAPAT ---
         isKelasLoading = false;
       });
 
-      // Panggil fetchSiswa setelah data kelas siap
       await fetchSiswa();
     } catch (e) {
       print('Error fetching kelas: $e');
       if (!mounted) return;
       setState(() {
-        // --- 4. SET isKelasLoading = false JIKA GAGAL JUGA ---
         isKelasLoading = false;
       });
     }
   }
 
   Future<void> fetchSiswa() async {
-    // ... (Fungsi fetchSiswa Anda tidak perlu diubah)
     setState(() => isLoading = true);
     try {
       var query = supabase.from('siswa').select('*, kelas!inner(nama_kelas)');
@@ -131,7 +122,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
           children: [
             _buildHeader(),
             const SizedBox(height: 28),
-            _buildFilter(), // Filter tetap dibangun
+            _buildFilter(), 
             const SizedBox(height: 20),
             isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -143,8 +134,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   }
 
   Widget _buildHeader() {
-    // ... (Fungsi _buildHeader Anda tidak perlu diubah)
-    return Container(
+       return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[500]!]),
@@ -179,7 +169,6 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
     );
   }
 
-  /// 🔹 FILTER SECTION: kelas, nama, dan status
   Widget _buildFilter() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -196,7 +185,6 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ... (Header Filter)
           const Row(
             children: [
               Icon(Icons.filter_alt, color: Colors.blueAccent),
@@ -208,18 +196,14 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
             ],
           ),
           const SizedBox(height: 16),
-          // --- 5. GUNAKAN isKelasLoading DI SINI ---
-          // Jika data kelas sedang loading, tampilkan placeholder
           isKelasLoading
               ? const Center(
                   child: Padding(
                   padding: EdgeInsets.all(8.0),
                   child: Text("Memuat filter kelas..."),
                 ))
-              // Jika sudah selesai, baru tampilkan filter yang sebenarnya
               : Row(
                   children: [
-                    // 🔸 Filter Kelas
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: selectedKelasId,
@@ -249,10 +233,8 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                     ),
                     const SizedBox(width: 16),
 
-                    // 🔸 Pencarian Nama
                     Expanded(
                       child: TextField(
-                        // ... (Tidak ada perubahan di sini)
                         controller: searchController,
                         decoration: InputDecoration(
                           labelText: 'Cari Nama',
@@ -269,10 +251,8 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                     ),
                     const SizedBox(width: 16),
 
-                    // 🔸 Filter Status
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        // ... (Tidak ada perubahan di sini)
                         value: selectedStatus,
                         hint: const Text("Semua Status"),
                         items: const [
@@ -308,7 +288,6 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   }
 
   Widget _buildTable() {
-    // ... (Fungsi _buildTable Anda tidak perlu diubah)
     if (siswaData.isEmpty) {
       return const Center(
         child: Padding(
@@ -390,7 +369,6 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   }
 
   Widget _buildAction(IconData icon, String label, Color color) {
-    // ... (Fungsi _buildAction Anda tidak perlu diubah)
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.1),
