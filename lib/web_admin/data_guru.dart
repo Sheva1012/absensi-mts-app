@@ -262,6 +262,11 @@ class _PageGuruState extends State<PageGuru> {
     );
   }
 
+  // --- WIDGET YANG DIPERBARUI ---
+  // --- GANTI HANYA METHOD _buildTable() INI ---
+
+  // --- GANTI LAGI METHOD _buildTable() INI ---
+
   Widget _buildTable() {
     if (guruData.isEmpty) {
       return const Center(
@@ -288,7 +293,10 @@ class _PageGuruState extends State<PageGuru> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
+          // --- PERBAIKAN ---
+          // Baris 'constraints' ini wajib ada dan tidak boleh dikomentari
           constraints: const BoxConstraints(minWidth: 1000),
+
           child: DataTable(
             columnSpacing: 24,
             headingRowHeight: 56,
@@ -308,9 +316,13 @@ class _PageGuruState extends State<PageGuru> {
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Role',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 80,
+                  child: Text(
+                    'Role',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
               DataColumn(
@@ -320,15 +332,23 @@ class _PageGuruState extends State<PageGuru> {
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Avatar',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 80,
+                  child: Text(
+                    'Avatar',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Aksi',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 180, // Lebar kolom Aksi tetap 180
+                  child: Text(
+                    'Aksi',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
             ],
@@ -352,32 +372,50 @@ class _PageGuruState extends State<PageGuru> {
                 cells: [
                   DataCell(Text(guru['nama'] ?? '-')),
                   DataCell(Text(guru['email'] ?? '-')),
-                  DataCell(Text(guru['role'] ?? '-')),
+                  DataCell(
+                    SizedBox(
+                      width: 80,
+                      child: Center(child: Text(guru['role'] ?? '-')),
+                    ),
+                  ),
                   DataCell(Text(kelasDiampuText)),
                   DataCell(
-                    guru['avatar_url'] != null && guru['avatar_url'].isNotEmpty
-                        ? CircleAvatar(
-                            backgroundImage: NetworkImage(guru['avatar_url']),
-                          )
-                        : const CircleAvatar(child: Icon(Icons.person)),
+                    SizedBox(
+                      width: 80,
+                      child: Center(
+                        child:
+                            guru['avatar_url'] != null &&
+                                guru['avatar_url'].isNotEmpty
+                            ? CircleAvatar(
+                                backgroundImage: NetworkImage(
+                                  guru['avatar_url'],
+                                ),
+                              )
+                            : const CircleAvatar(child: Icon(Icons.person)),
+                      ),
+                    ),
                   ),
                   DataCell(
-                    Row(
-                      children: [
-                        _buildActionButton(
-                          Icons.edit,
-                          'Edit',
-                          Colors.blue,
-                          onPressed: () => _showFormDialog(guru: guru),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildActionButton(
-                          Icons.delete,
-                          'Hapus',
-                          Colors.red,
-                          onPressed: () => _showDeleteDialog(guru),
-                        ),
-                      ],
+                    SizedBox(
+                      width: 180, // Lebar sel Aksi tetap 180
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildActionButton(
+                            Icons.edit,
+                            'Edit',
+                            Colors.blue,
+                            onPressed: () => _showFormDialog(guru: guru),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildActionButton(
+                            Icons.delete,
+                            'Hapus',
+                            Colors.red,
+                            onPressed: () => _showDeleteDialog(guru),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -388,6 +426,7 @@ class _PageGuruState extends State<PageGuru> {
       ),
     );
   }
+  // --- AKHIR DARI WIDGET YANG DIPERBARUI ---
 
   Widget _buildActionButton(
     IconData icon,
@@ -413,6 +452,9 @@ class _PageGuruState extends State<PageGuru> {
   }
 }
 
+//
+// --- Class FormGuru (Tidak Ada Perubahan) ---
+//
 class FormGuru extends StatefulWidget {
   final Map<String, dynamic>? initialData;
   final Function(Map<String, dynamic>) onSave;

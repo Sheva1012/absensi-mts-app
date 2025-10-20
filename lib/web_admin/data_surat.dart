@@ -3,8 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart'; 
-import 'package:url_launcher/url_launcher.dart'; 
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -12,10 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:universal_html/html.dart' as html;
 
 // Daftar Jenis Surat Dibatasi hanya Izin dan Sakit
-const List<String> jenisSuratList = [
-  'izin', 
-  'sakit', 
-];
+const List<String> jenisSuratList = ['izin', 'sakit'];
 
 class DataSuratPage extends StatefulWidget {
   final String schoolName;
@@ -40,7 +37,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
   @override
   void initState() {
     super.initState();
-    Intl.defaultLocale = 'id_ID'; 
+    Intl.defaultLocale = 'id_ID';
     fetchSurat();
   }
 
@@ -51,26 +48,35 @@ class _DataSuratPageState extends State<DataSuratPage> {
       var query = supabase.from('surat').select('*, siswa!inner(nama)');
 
       if (selectedStartDate != null) {
-        query = query.gte('tanggal', DateFormat('yyyy-MM-dd').format(selectedStartDate!));
+        query = query.gte(
+          'tanggal',
+          DateFormat('yyyy-MM-dd').format(selectedStartDate!),
+        );
       }
       if (selectedEndDate != null) {
-        query = query.lte('tanggal', DateFormat('yyyy-MM-dd').format(selectedEndDate!));
+        query = query.lte(
+          'tanggal',
+          DateFormat('yyyy-MM-dd').format(selectedEndDate!),
+        );
       }
       if (selectedJenisSurat != null && selectedJenisSurat!.isNotEmpty) {
         query = query.eq('jenis', selectedJenisSurat!);
       }
 
       final response = await query.order('tanggal', ascending: false);
-      List<Map<String, dynamic>> allData =
-          List<Map<String, dynamic>>.from(response);
+      List<Map<String, dynamic>> allData = List<Map<String, dynamic>>.from(
+        response,
+      );
 
       if (searchController.text.trim().isNotEmpty) {
         String keyword = searchController.text.toLowerCase();
         allData = allData
-            .where((s) => (s['siswa']?['nama'] ?? '')
-                .toString()
-                .toLowerCase()
-                .contains(keyword))
+            .where(
+              (s) => (s['siswa']?['nama'] ?? '')
+                  .toString()
+                  .toLowerCase()
+                  .contains(keyword),
+            )
             .toList();
       }
 
@@ -83,12 +89,15 @@ class _DataSuratPageState extends State<DataSuratPage> {
       print('❌ Error fetching surat: $e');
       print('Stacktrace: $stacktrace');
       print('==================================================');
-      
+
       setState(() => isLoading = false);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Gagal memuat data surat. Cek log konsol untuk detail.')),
+            content: Text(
+              'Gagal memuat data surat. Cek log konsol untuk detail.',
+            ),
+          ),
         );
       }
     }
@@ -96,23 +105,24 @@ class _DataSuratPageState extends State<DataSuratPage> {
 
   void _showSnackbar(String message) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
-  /// 📤 Menangani Download/Konversi PDF 
-  /// Logika ini sekarang menangani konversi jika URL adalah gambar, 
+  /// 📤 Menangani Download/Konversi PDF
+  /// Logika ini sekarang menangani konversi jika URL adalah gambar,
   /// dan memicu download otomatis untuk web/mobile.
   Future<void> _handleDownload(String fileUrl, String fileName) async {
     if (fileUrl.isEmpty) {
       _showSnackbar('URL file tidak tersedia.');
       return;
     }
-    
+
     // Cek apakah URL adalah gambar yang mungkin perlu dikonversi
-    final isImage = fileUrl.toLowerCase().contains('.png') ||
+    final isImage =
+        fileUrl.toLowerCase().contains('.png') ||
         fileUrl.toLowerCase().contains('.jpg') ||
         fileUrl.toLowerCase().contains('.jpeg') ||
         fileUrl.toLowerCase().contains('.webp'); // asumsi ini bisa diconvert
@@ -123,7 +133,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
         // 1. Ambil data gambar dari URL
         final response = await http.get(Uri.parse(fileUrl));
         if (response.statusCode != 200) {
-          _showSnackbar('Gagal mengambil file gambar. Status: ${response.statusCode}');
+          _showSnackbar(
+            'Gagal mengambil file gambar. Status: ${response.statusCode}',
+          );
           return;
         }
         final imageBytes = response.bodyBytes;
@@ -164,7 +176,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
           final directory = await getApplicationDocumentsDirectory();
           final file = File('${directory.path}/$finalFileName');
           await file.writeAsBytes(pdfBytes);
-          
+
           // Coba membuka file (Tergantung OS, bisa memicu viewer/download)
           final success = await launchUrl(Uri.file(file.path));
           if (success) {
@@ -173,7 +185,6 @@ class _DataSuratPageState extends State<DataSuratPage> {
             _showSnackbar('PDF berhasil dibuat, tetapi gagal dibuka.');
           }
         }
-
       } catch (e, stacktrace) {
         print('==================================================');
         print('❌ Error converting/downloading PDF: $e');
@@ -181,22 +192,18 @@ class _DataSuratPageState extends State<DataSuratPage> {
         print('==================================================');
         _showSnackbar('Gagal mengkonversi/mengunduh PDF. Cek log konsol.');
       }
-
     } else {
       // Jika URL bukan gambar (misalnya, sudah PDF atau jenis dokumen lain)
       // Gunakan url_launcher untuk membuka/mengunduh URL aslinya
       final Uri uri = Uri.parse(fileUrl);
-      
+
       if (!await canLaunchUrl(uri)) {
         _showSnackbar('URL tidak valid atau browser tidak bisa dibuka.');
         return;
       }
-      
+
       try {
-        await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
         _showSnackbar('Membuka file asli...');
       } catch (e) {
         _showSnackbar('Error saat membuka file: $e');
@@ -236,13 +243,16 @@ class _DataSuratPageState extends State<DataSuratPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[500]!]),
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.blue[500]!],
+        ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.blue.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4))
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Row(
@@ -251,7 +261,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
           const Text(
             'Data Surat Izin/Sakit Siswa',
             style: TextStyle(
-                fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           Row(
             children: [
@@ -276,9 +289,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Column(
@@ -295,35 +309,31 @@ class _DataSuratPageState extends State<DataSuratPage> {
             ],
           ),
           const SizedBox(height: 16),
-          Wrap( 
+          Wrap(
             spacing: 16,
             runSpacing: 16,
             children: [
               SizedBox(
                 width: 230,
-                child: _buildDateFilter(
-                  'Dari Tanggal',
-                  selectedStartDate,
-                  (date) {
-                    setState(() {
-                      selectedStartDate = date;
-                    });
-                    fetchSurat();
-                  },
-                ),
+                child: _buildDateFilter('Dari Tanggal', selectedStartDate, (
+                  date,
+                ) {
+                  setState(() {
+                    selectedStartDate = date;
+                  });
+                  fetchSurat();
+                }),
               ),
               SizedBox(
                 width: 230,
-                child: _buildDateFilter(
-                  'Sampai Tanggal',
-                  selectedEndDate,
-                  (date) {
-                    setState(() {
-                      selectedEndDate = date;
-                    });
-                    fetchSurat();
-                  },
-                ),
+                child: _buildDateFilter('Sampai Tanggal', selectedEndDate, (
+                  date,
+                ) {
+                  setState(() {
+                    selectedEndDate = date;
+                  });
+                  fetchSurat();
+                }),
               ),
               SizedBox(
                 width: 230,
@@ -332,11 +342,13 @@ class _DataSuratPageState extends State<DataSuratPage> {
                   hint: const Text("Pilih Jenis Surat"),
                   items: [
                     const DropdownMenuItem(
-                        value: null, child: Text("Semua Jenis")),
-                    ...jenisSuratList.map((jenis) => DropdownMenuItem(
-                          value: jenis,
-                          child: Text(jenis),
-                        )),
+                      value: null,
+                      child: Text("Semua Jenis"),
+                    ),
+                    ...jenisSuratList.map(
+                      (jenis) =>
+                          DropdownMenuItem(value: jenis, child: Text(jenis)),
+                    ),
                   ],
                   onChanged: (value) {
                     setState(() {
@@ -347,9 +359,12 @@ class _DataSuratPageState extends State<DataSuratPage> {
                   decoration: InputDecoration(
                     labelText: 'Jenis Surat',
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                 ),
               ),
@@ -361,12 +376,15 @@ class _DataSuratPageState extends State<DataSuratPage> {
                     labelText: 'Cari Nama Siswa',
                     prefixIcon: const Icon(Icons.search),
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                   onChanged: (val) {
-                    fetchSurat(); 
+                    fetchSurat();
                   },
                 ),
               ),
@@ -378,7 +396,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
   }
 
   Widget _buildDateFilter(
-      String label, DateTime? currentValue, Function(DateTime?) onChanged) {
+    String label,
+    DateTime? currentValue,
+    Function(DateTime?) onChanged,
+  ) {
     return TextFormField(
       readOnly: true,
       onTap: () async {
@@ -408,8 +429,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
                 },
         ),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
     );
   }
@@ -432,15 +455,16 @@ class _DataSuratPageState extends State<DataSuratPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.grey.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 2))
+            color: Colors.grey.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1000), 
+          constraints: const BoxConstraints(minWidth: 1000),
           child: DataTable(
             columnSpacing: 24,
             headingRowHeight: 56,
@@ -448,46 +472,71 @@ class _DataSuratPageState extends State<DataSuratPage> {
             headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
             columns: const [
               DataColumn(
-                  label: Text('ID Surat',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'ID Surat',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('ID Siswa',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'ID Siswa',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Nama Siswa',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Nama Siswa',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Tanggal',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Tanggal',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Jenis Surat',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Jenis Surat',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Aksi',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Aksi',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
             rows: List.generate(suratData.length, (i) {
               final s = suratData[i];
               final tanggal = s['tanggal'] != null
-                  ? DateFormat('dd MMM yyyy')
-                      .format(DateTime.parse(s['tanggal']))
-                      : '-';
+                  ? DateFormat(
+                      'dd MMM yyyy',
+                    ).format(DateTime.parse(s['tanggal']))
+                  : '-';
 
-              return DataRow(cells: [
-                DataCell(Text('${s['id'] ?? '-'}')),
-                DataCell(Text('${s['siswa_id'] ?? '-'}')),
-                DataCell(Text('${s['siswa']?['nama'] ?? '-'}')),
-                DataCell(Text(tanggal)),
-                DataCell(Text('${s['jenis'] ?? '-'}')),
-                DataCell(Row(children: [
-                  _buildAction(
-                    Icons.visibility,
-                    'Lihat',
-                    Colors.green,
-                    () => _showDetailDialog(s),
+              return DataRow(
+                cells: [
+                  DataCell(Text('${s['id'] ?? '-'}')),
+                  DataCell(Text('${s['siswa_id'] ?? '-'}')),
+                  DataCell(Text('${s['siswa']?['nama'] ?? '-'}')),
+                  DataCell(Text(tanggal)),
+                  DataCell(Text('${s['jenis'] ?? '-'}')),
+                  DataCell(
+                    Row(
+                      children: [
+                        _buildAction(
+                          Icons.visibility,
+                          'Lihat',
+                          Colors.green,
+                          () => _showDetailDialog(s),
+                        ),
+                      ],
+                    ),
                   ),
-                ])),
-              ]);
+                ],
+              );
             }),
           ),
         ),
@@ -498,13 +547,17 @@ class _DataSuratPageState extends State<DataSuratPage> {
   /// ℹ️ Dialog Detail Surat
   void _showDetailDialog(Map<String, dynamic> surat) {
     final String tanggal = surat['tanggal'] != null
-        ? DateFormat('EEEE, dd MMMM yyyy').format(DateTime.parse(surat['tanggal']))
+        ? DateFormat(
+            'EEEE, dd MMMM yyyy',
+          ).format(DateTime.parse(surat['tanggal']))
         : '-';
 
     final String fileUrl = surat['file_url'] ?? '';
     final bool isDownloadable = fileUrl.isNotEmpty;
     final String actionLabel = _getDownloadActionLabel(fileUrl);
-    final Color actionColor = fileUrl.toLowerCase().contains('.pdf') ? Colors.red : Colors.orange;
+    final Color actionColor = fileUrl.toLowerCase().contains('.pdf')
+        ? Colors.red
+        : Colors.orange;
 
     showDialog(
       context: context,
@@ -521,18 +574,26 @@ class _DataSuratPageState extends State<DataSuratPage> {
                 _buildDetailRow('Jenis Surat:', surat['jenis'] ?? '-'),
                 _buildDetailRow('File URL:', fileUrl),
                 const SizedBox(height: 16),
-                const Text('Aksi:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Aksi:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
                   onPressed: isDownloadable
                       ? () {
-                          Navigator.of(context).pop(); // Tutup dialog sebelum download
+                          Navigator.of(
+                            context,
+                          ).pop(); // Tutup dialog sebelum download
                           // Buat nama file yang unik untuk download
-                          final filename = 'surat_${surat['id'] ?? 'unknown'}_${surat['jenis'] ?? 'file'}';
-                          _handleDownload(fileUrl, filename); // Panggil fungsi download/konversi
+                          final filename =
+                              'surat_${surat['id'] ?? 'unknown'}_${surat['jenis'] ?? 'file'}';
+                          _handleDownload(
+                            fileUrl,
+                            filename,
+                          ); // Panggil fungsi download/konversi
                         }
-                      : null, 
+                      : null,
                   icon: const Icon(Icons.picture_as_pdf),
                   label: Text(actionLabel),
                   style: ElevatedButton.styleFrom(
@@ -555,12 +616,14 @@ class _DataSuratPageState extends State<DataSuratPage> {
       },
     );
   }
-  
+
   String _getDownloadActionLabel(String fileUrl) {
     final lowerUrl = fileUrl.toLowerCase();
     if (lowerUrl.isEmpty) {
       return 'File Tidak Tersedia';
-    } else if (lowerUrl.contains('.png') || lowerUrl.contains('.jpg') || lowerUrl.contains('.jpeg')) {
+    } else if (lowerUrl.contains('.png') ||
+        lowerUrl.contains('.jpg') ||
+        lowerUrl.contains('.jpeg')) {
       return 'Konversi & Download PDF (dari Gambar)';
     } else if (lowerUrl.contains('.pdf')) {
       return 'Download PDF Asli';
@@ -577,7 +640,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
         children: [
           SizedBox(
             width: 100,
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
           Expanded(child: Text(value)),
         ],
@@ -586,7 +652,11 @@ class _DataSuratPageState extends State<DataSuratPage> {
   }
 
   Widget _buildAction(
-      IconData icon, String label, Color color, VoidCallback onPressed) {
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onPressed,
+  ) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.1),
@@ -596,8 +666,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       icon: Icon(icon, size: 16),
-      label: Text(label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
       onPressed: onPressed,
     );
   }

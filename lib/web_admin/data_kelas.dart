@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'data_siswa.dart'; 
+import 'data_siswa.dart';
 
 class PageKelas extends StatefulWidget {
   final String schoolName;
   final Function(String kelasId) onViewSiswa;
 
-  const PageKelas({super.key, required this.schoolName, required this.onViewSiswa});
+  const PageKelas({
+    super.key,
+    required this.schoolName,
+    required this.onViewSiswa,
+  });
 
   @override
   State<PageKelas> createState() => _PageKelasState();
@@ -27,7 +31,6 @@ class _PageKelasState extends State<PageKelas> {
   Future<void> fetchData() async {
     setState(() => isLoading = true);
     try {
-
       final kelasResponse = await supabase
           .from('kelas')
           .select()
@@ -50,14 +53,21 @@ class _PageKelasState extends State<PageKelas> {
     }
   }
 
-  Future<void> updateKelas(Map<String, dynamic> kelas, String namaKelas,
-      String jamMasuk, String? waliGuruId) async {
+  Future<void> updateKelas(
+    Map<String, dynamic> kelas,
+    String namaKelas,
+    String jamMasuk,
+    String? waliGuruId,
+  ) async {
     try {
-      await supabase.from('kelas').update({
-        'nama_kelas': namaKelas,
-        'jam_masuk': jamMasuk,
-        'wali_kelas': waliGuruId,
-      }).eq('id', kelas['id']);
+      await supabase
+          .from('kelas')
+          .update({
+            'nama_kelas': namaKelas,
+            'jam_masuk': jamMasuk,
+            'wali_kelas': waliGuruId,
+          })
+          .eq('id', kelas['id']);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Data kelas berhasil diperbarui')),
@@ -72,10 +82,12 @@ class _PageKelasState extends State<PageKelas> {
   }
 
   void _showEditDialog(Map<String, dynamic> kelas) {
-    final TextEditingController namaController =
-        TextEditingController(text: kelas['nama_kelas'] ?? '');
-    final TextEditingController jamMasukController =
-        TextEditingController(text: kelas['jam_masuk'] ?? '');
+    final TextEditingController namaController = TextEditingController(
+      text: kelas['nama_kelas'] ?? '',
+    );
+    final TextEditingController jamMasukController = TextEditingController(
+      text: kelas['jam_masuk'] ?? '',
+    );
     String? selectedGuruId = kelas['wali_kelas'];
 
     showDialog(
@@ -151,8 +163,10 @@ class _PageKelasState extends State<PageKelas> {
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content:
-                            Text('Nama kelas dan jam masuk tidak boleh kosong')),
+                      content: Text(
+                        'Nama kelas dan jam masuk tidak boleh kosong',
+                      ),
+                    ),
                   );
                 }
               },
@@ -188,13 +202,16 @@ class _PageKelasState extends State<PageKelas> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[500]!]),
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.blue[500]!],
+        ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.blue.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4))
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Row(
@@ -203,7 +220,10 @@ class _PageKelasState extends State<PageKelas> {
           const Text(
             'Data Kelas',
             style: TextStyle(
-                fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           Row(
             children: [
@@ -238,9 +258,10 @@ class _PageKelasState extends State<PageKelas> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.grey.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 2))
+            color: Colors.grey.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: SingleChildScrollView(
@@ -254,20 +275,35 @@ class _PageKelasState extends State<PageKelas> {
             headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
             columns: const [
               DataColumn(
-                  label:
-                      Text('ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'ID',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Nama Kelas',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Nama Kelas',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Wali Kelas',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Wali Kelas',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Jam Masuk',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Jam Masuk',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Aksi',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Aksi',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
             rows: List.generate(kelasData.length, (i) {
               final s = kelasData[i];
@@ -275,23 +311,34 @@ class _PageKelasState extends State<PageKelas> {
                 (g) => g['id'] == s['wali_kelas'],
                 orElse: () => {'nama': '-'},
               );
-              return DataRow(cells: [
-                DataCell(Text(s['id'].toString())),
-                DataCell(Text(s['nama_kelas'] ?? '-')),
-                DataCell(Text(wali['nama'] ?? '-')),
-                DataCell(Text(s['jam_masuk'] ?? '-')),
-                DataCell(Row(children: [
-                  _buildAction(Icons.edit, 'Edit', Colors.blue, () {
-                    _showEditDialog(s);
-                  }),
-                  const SizedBox(width: 8),
-                  
-                  // --- PERBAIKAN NAVIGASI ---
-                  _buildAction(Icons.visibility, 'Lihat', Colors.green, () {
-                widget.onViewSiswa(s['id'].toString());
-                  }),
-                ])),
-              ]);
+              return DataRow(
+                cells: [
+                  DataCell(Text(s['id'].toString())),
+                  DataCell(Text(s['nama_kelas'] ?? '-')),
+                  DataCell(Text(wali['nama'] ?? '-')),
+                  DataCell(Text(s['jam_masuk'] ?? '-')),
+                  DataCell(
+                    Row(
+                      children: [
+                        _buildAction(Icons.edit, 'Edit', Colors.blue, () {
+                          _showEditDialog(s);
+                        }),
+                        const SizedBox(width: 8),
+
+                        // --- PERBAIKAN NAVIGASI ---
+                        _buildAction(
+                          Icons.visibility,
+                          'Lihat',
+                          Colors.green,
+                          () {
+                            widget.onViewSiswa(s['id'].toString());
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
             }),
           ),
         ),
@@ -300,7 +347,11 @@ class _PageKelasState extends State<PageKelas> {
   }
 
   Widget _buildAction(
-      IconData icon, String label, Color color, VoidCallback onTap) {
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.1),
@@ -310,8 +361,10 @@ class _PageKelasState extends State<PageKelas> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       icon: Icon(icon, size: 16),
-      label: Text(label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
       onPressed: onTap,
     );
   }

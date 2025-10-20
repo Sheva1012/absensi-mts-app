@@ -14,7 +14,11 @@ class PlaceholderScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.construction, size: 80, color: _secondaryColor.withOpacity(0.5)),
+          Icon(
+            Icons.construction,
+            size: 80,
+            color: _secondaryColor.withOpacity(0.5),
+          ),
           const SizedBox(height: 20),
           Text(
             'Halaman "$title"',
@@ -27,10 +31,7 @@ class PlaceholderScreen extends StatelessWidget {
           const SizedBox(height: 10),
           const Text(
             'Dalam pengembangan. Silakan pilih menu lain.',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey,
-            ),
+            style: TextStyle(fontSize: 18, color: Colors.grey),
           ),
         ],
       ),
