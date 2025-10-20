@@ -5,7 +5,11 @@ class DataSiswaPage extends StatefulWidget {
   final String schoolName;
   final String? initialKelasId;
 
-  const DataSiswaPage({super.key, required this.schoolName,this.initialKelasId,});
+  const DataSiswaPage({
+    super.key,
+    required this.schoolName,
+    this.initialKelasId,
+  });
 
   @override
   State<DataSiswaPage> createState() => _DataSiswaPageState();
@@ -74,16 +78,17 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       }
 
       final response = await query.order('kelas_id', ascending: true);
-      List<Map<String, dynamic>> allData =
-          List<Map<String, dynamic>>.from(response);
+      List<Map<String, dynamic>> allData = List<Map<String, dynamic>>.from(
+        response,
+      );
 
       if (searchController.text.trim().isNotEmpty) {
         String keyword = searchController.text.toLowerCase();
         allData = allData
-            .where((s) => (s['nama'] ?? '')
-                .toString()
-                .toLowerCase()
-                .contains(keyword))
+            .where(
+              (s) =>
+                  (s['nama'] ?? '').toString().toLowerCase().contains(keyword),
+            )
             .toList();
       }
 
@@ -91,8 +96,9 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       setState(() {
         siswaData = allData;
         siswaData.sort((a, b) {
-          int kelasComparison =
-              (a['kelas_id'] ?? 0).compareTo(b['kelas_id'] ?? 0);
+          int kelasComparison = (a['kelas_id'] ?? 0).compareTo(
+            b['kelas_id'] ?? 0,
+          );
           if (kelasComparison != 0) return kelasComparison;
           return (a['no'] ?? 0).compareTo(b['no'] ?? 0);
         });
@@ -137,13 +143,16 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
        return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[500]!]),
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.blue[500]!],
+        ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.blue.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4))
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Row(
@@ -152,7 +161,10 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
           const Text(
             'Data Siswa',
             style: TextStyle(
-                fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           Row(
             children: [
@@ -177,9 +189,10 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Column(
@@ -202,6 +215,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                   padding: EdgeInsets.all(8.0),
                   child: Text("Memuat filter kelas..."),
                 ))
+              // Jika sudah selesai, baru tampilkan filter yang sebenarnya
               : Row(
                   children: [
                     Expanded(
@@ -210,11 +224,15 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                         hint: const Text("Pilih Kelas"),
                         items: [
                           const DropdownMenuItem(
-                              value: null, child: Text("Semua Kelas")),
-                          ...kelasList.map((kelas) => DropdownMenuItem(
-                                value: kelas['id'].toString(),
-                                child: Text(kelas['nama_kelas']),
-                              )),
+                            value: null,
+                            child: Text("Semua Kelas"),
+                          ),
+                          ...kelasList.map(
+                            (kelas) => DropdownMenuItem(
+                              value: kelas['id'].toString(),
+                              child: Text(kelas['nama_kelas']),
+                            ),
+                          ),
                         ],
                         onChanged: (value) {
                           setState(() {
@@ -225,9 +243,12 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                         decoration: InputDecoration(
                           labelText: 'Kelas',
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -240,9 +261,12 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                           labelText: 'Cari Nama',
                           prefixIcon: const Icon(Icons.search),
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                         ),
                         onChanged: (val) {
                           fetchSiswa();
@@ -257,13 +281,21 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                         hint: const Text("Semua Status"),
                         items: const [
                           DropdownMenuItem(
-                              value: null, child: Text("Semua Status")),
-                          DropdownMenuItem(value: "Aktif", child: Text("Aktif")),
+                            value: null,
+                            child: Text("Semua Status"),
+                          ),
                           DropdownMenuItem(
-                              value: "Tidak Aktif",
-                              child: Text("Tidak Aktif")),
+                            value: "Aktif",
+                            child: Text("Aktif"),
+                          ),
                           DropdownMenuItem(
-                              value: "Lulus", child: Text("Lulus")),
+                            value: "Tidak Aktif",
+                            child: Text("Tidak Aktif"),
+                          ),
+                          DropdownMenuItem(
+                            value: "Lulus",
+                            child: Text("Lulus"),
+                          ),
                         ],
                         onChanged: (value) {
                           setState(() {
@@ -274,9 +306,12 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                         decoration: InputDecoration(
                           labelText: 'Status',
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -305,9 +340,10 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.grey.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 2))
+            color: Colors.grey.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: SingleChildScrollView(
@@ -321,46 +357,76 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
             headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
             columns: const [
               DataColumn(
-                  label: Text('No',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'No',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('NIS',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'NIS',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Nama',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Nama',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Kelas',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Kelas',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Nama Ortu',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Nama Ortu',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('No. Ortu',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'No. Ortu',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Status',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Status',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
               DataColumn(
-                  label: Text('Aksi',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+                label: Text(
+                  'Aksi',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
             rows: List.generate(siswaData.length, (i) {
               final s = siswaData[i];
-              return DataRow(cells: [
-                DataCell(Text('${s['no'] ?? '-'}')),
-                DataCell(Text('${s['nis'] ?? '-'}')),
-                DataCell(Text('${s['nama'] ?? '-'}')),
-                DataCell(Text('${s['kelas']?['nama_kelas'] ?? '-'}')),
-                DataCell(Text('${s['orang_tua_nama'] ?? '-'}')),
-                DataCell(Text('${s['orang_tua_nomor'] ?? '-'}')),
-                DataCell(Text('${s['status'] ?? '-'}')),
-                DataCell(Row(children: [
-                  _buildAction(Icons.edit, 'Edit', Colors.blue),
-                  const SizedBox(width: 8),
-                  _buildAction(Icons.visibility, 'Lihat', Colors.green),
-                ])),
-              ]);
+              return DataRow(
+                cells: [
+                  DataCell(Text('${s['no'] ?? '-'}')),
+                  DataCell(Text('${s['nis'] ?? '-'}')),
+                  DataCell(Text('${s['nama'] ?? '-'}')),
+                  DataCell(Text('${s['kelas']?['nama_kelas'] ?? '-'}')),
+                  DataCell(Text('${s['orang_tua_nama'] ?? '-'}')),
+                  DataCell(Text('${s['orang_tua_nomor'] ?? '-'}')),
+                  DataCell(Text('${s['status'] ?? '-'}')),
+                  DataCell(
+                    Row(
+                      children: [
+                        _buildAction(Icons.edit, 'Edit', Colors.blue),
+                        const SizedBox(width: 8),
+                        _buildAction(Icons.visibility, 'Lihat', Colors.green),
+                      ],
+                    ),
+                  ),
+                ],
+              );
             }),
           ),
         ),
@@ -378,8 +444,10 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       icon: Icon(icon, size: 16),
-      label: Text(label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
       onPressed: () {},
     );
   }

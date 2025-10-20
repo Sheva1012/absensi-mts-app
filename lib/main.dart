@@ -9,7 +9,7 @@ import 'web_admin/data_kelas.dart';
 import 'web_admin/data_guru.dart';
 import 'web_admin/data_siswa.dart';
 import 'web_admin/data_absensi.dart';
-// import 'web_admin/data_surat.dart'; // Uncomment jika file ini ada
+import 'web_admin/data_surat.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -102,8 +102,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       _selectedIndex = 4;
     });
   }
+
   void _onItemTapped(int index) async {
-    if (index == 6) { // Logout
+    if (index == 6) {
+      // Logout
       await supabase.auth.signOut();
       return;
     }
@@ -112,7 +114,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       setState(() {
         _widgetOptions[4] = const DataSiswaPage(
           schoolName: 'MTs Sunan Gunung Jati',
-          initialKelasId: null, 
+          initialKelasId: null,
         );
         _selectedIndex = index;
       });
@@ -131,13 +133,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       const DashboardScreen(), // Index 0
       const PageAbsensi(schoolName: 'MTs Sunan Gunung Jati'), // Index 1
       const PageGuru(schoolName: 'MTs Sunan Gunung Jati'), // Index 2
-
       // Hapus 'const' karena 'onViewSiswa' bukan nilai constant
       PageKelas(
         schoolName: 'MTs Sunan Gunung Jati',
         onViewSiswa: _navigateToSiswa, // <-- Kirim fungsi callback ke anak
       ), // Index 3
-
       // Hapus 'const' dan beri 'initialKelasId: null'
       const DataSiswaPage(
         schoolName: 'MTs Sunan Gunung Jati',
@@ -166,24 +166,5 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         ],
       ),
     );
-  }
-}
-
-// Tambahkan placeholder pages jika belum ada, atau impor dari file terpisah
-class DataAbsensiPage extends StatelessWidget {
-  final String schoolName;
-  const DataAbsensiPage({super.key, required this.schoolName});
-  @override
-  Widget build(BuildContext context) {
-    return const PlaceholderScreen(title: 'Halaman Absensi');
-  }
-}
-
-class DataSuratPage extends StatelessWidget {
-  final String schoolName;
-  const DataSuratPage({super.key, required this.schoolName});
-  @override
-  Widget build(BuildContext context) {
-    return const PlaceholderScreen(title: 'Halaman Surat');
   }
 }
