@@ -3,8 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DataSiswaPage extends StatefulWidget {
   final String schoolName;
+  final String? initialKelasId;
 
-  const DataSiswaPage({super.key, required this.schoolName});
+  const DataSiswaPage({super.key, required this.schoolName,this.initialKelasId,});
 
   @override
   State<DataSiswaPage> createState() => _DataSiswaPageState();
@@ -12,7 +13,13 @@ class DataSiswaPage extends StatefulWidget {
 
 class _DataSiswaPageState extends State<DataSiswaPage> {
   final SupabaseClient supabase = Supabase.instance.client;
+
+  // State loading untuk tabel utama (sudah ada)
   bool isLoading = true;
+  // --- 1. TAMBAHKAN STATE LOADING BARU ---
+  // State loading khusus untuk dropdown filter kelas
+  bool isKelasLoading = true;
+
   List<Map<String, dynamic>> siswaData = [];
   List<Map<String, dynamic>> kelasList = [];
 
@@ -23,27 +30,46 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   @override
   void initState() {
     super.initState();
+    // Ambil ID kelas dari widget (jika ada)
+    selectedKelasId = widget.initialKelasId;
+    // Mulai proses loading
     fetchKelas();
   }
 
   Future<void> fetchKelas() async {
+    // --- 2. PASTIKAN isKelasLoading = true DI AWAL ---
+    if (!mounted) return;
+    setState(() {
+      isKelasLoading = true;
+    });
+
     try {
       final response = await supabase
           .from('kelas')
           .select('id, nama_kelas')
           .order('nama_kelas', ascending: true);
 
+      if (!mounted) return;
       setState(() {
         kelasList = List<Map<String, dynamic>>.from(response);
+        // --- 3. SET isKelasLoading = false SETELAH DATA DAPAT ---
+        isKelasLoading = false;
       });
 
+      // Panggil fetchSiswa setelah data kelas siap
       await fetchSiswa();
     } catch (e) {
       print('Error fetching kelas: $e');
+      if (!mounted) return;
+      setState(() {
+        // --- 4. SET isKelasLoading = false JIKA GAGAL JUGA ---
+        isKelasLoading = false;
+      });
     }
   }
 
   Future<void> fetchSiswa() async {
+    // ... (Fungsi fetchSiswa Anda tidak perlu diubah)
     setState(() => isLoading = true);
     try {
       var query = supabase.from('siswa').select('*, kelas!inner(nama_kelas)');
@@ -60,7 +86,6 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       List<Map<String, dynamic>> allData =
           List<Map<String, dynamic>>.from(response);
 
-      // 🔍 Filter nama di sisi client (karena Supabase tidak pakai LIKE di Flutter SDK)
       if (searchController.text.trim().isNotEmpty) {
         String keyword = searchController.text.toLowerCase();
         allData = allData
@@ -71,6 +96,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
             .toList();
       }
 
+      if (!mounted) return;
       setState(() {
         siswaData = allData;
         siswaData.sort((a, b) {
@@ -83,6 +109,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       });
     } catch (e) {
       print('Error fetching siswa: $e');
+      if (!mounted) return;
       setState(() => isLoading = false);
     }
   }
@@ -104,7 +131,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
           children: [
             _buildHeader(),
             const SizedBox(height: 28),
-            _buildFilter(),
+            _buildFilter(), // Filter tetap dibangun
             const SizedBox(height: 20),
             isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -116,6 +143,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   }
 
   Widget _buildHeader() {
+    // ... (Fungsi _buildHeader Anda tidak perlu diubah)
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -168,6 +196,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ... (Header Filter)
           const Row(
             children: [
               Icon(Icons.filter_alt, color: Colors.blueAccent),
@@ -179,91 +208,107 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              // 🔸 Filter Kelas
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: selectedKelasId,
-                  hint: const Text("Pilih Kelas"),
-                  items: [
-                    const DropdownMenuItem(
-                        value: null, child: Text("Semua Kelas")),
-                    ...kelasList.map((kelas) => DropdownMenuItem(
-                          value: kelas['id'].toString(),
-                          child: Text(kelas['nama_kelas']),
-                        )),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      selectedKelasId = value;
-                    });
-                    fetchSiswa();
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Kelas',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
+          // --- 5. GUNAKAN isKelasLoading DI SINI ---
+          // Jika data kelas sedang loading, tampilkan placeholder
+          isKelasLoading
+              ? const Center(
+                  child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text("Memuat filter kelas..."),
+                ))
+              // Jika sudah selesai, baru tampilkan filter yang sebenarnya
+              : Row(
+                  children: [
+                    // 🔸 Filter Kelas
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: selectedKelasId,
+                        hint: const Text("Pilih Kelas"),
+                        items: [
+                          const DropdownMenuItem(
+                              value: null, child: Text("Semua Kelas")),
+                          ...kelasList.map((kelas) => DropdownMenuItem(
+                                value: kelas['id'].toString(),
+                                child: Text(kelas['nama_kelas']),
+                              )),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            selectedKelasId = value;
+                          });
+                          fetchSiswa();
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Kelas',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
 
-              // 🔸 Pencarian Nama
-              Expanded(
-                child: TextField(
-                  controller: searchController,
-                  decoration: InputDecoration(
-                    labelText: 'Cari Nama',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                  onChanged: (val) {
-                    fetchSiswa();
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
+                    // 🔸 Pencarian Nama
+                    Expanded(
+                      child: TextField(
+                        // ... (Tidak ada perubahan di sini)
+                        controller: searchController,
+                        decoration: InputDecoration(
+                          labelText: 'Cari Nama',
+                          prefixIcon: const Icon(Icons.search),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                        ),
+                        onChanged: (val) {
+                          fetchSiswa();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
 
-              // 🔸 Filter Status
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: selectedStatus,
-                  hint: const Text("Semua Status"),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text("Semua Status")),
-                    DropdownMenuItem(value: "Aktif", child: Text("Aktif")),
-                    DropdownMenuItem(value: "Tidak Aktif", child: Text("Tidak Aktif")),
-                    DropdownMenuItem(value: "Lulus", child: Text("Lulus")),
+                    // 🔸 Filter Status
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        // ... (Tidak ada perubahan di sini)
+                        value: selectedStatus,
+                        hint: const Text("Semua Status"),
+                        items: const [
+                          DropdownMenuItem(
+                              value: null, child: Text("Semua Status")),
+                          DropdownMenuItem(value: "Aktif", child: Text("Aktif")),
+                          DropdownMenuItem(
+                              value: "Tidak Aktif",
+                              child: Text("Tidak Aktif")),
+                          DropdownMenuItem(
+                              value: "Lulus", child: Text("Lulus")),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            selectedStatus = value;
+                          });
+                          fetchSiswa();
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Status',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                    ),
                   ],
-                  onChanged: (value) {
-                    setState(() {
-                      selectedStatus = value;
-                    });
-                    fetchSiswa();
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
                 ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 
   Widget _buildTable() {
+    // ... (Fungsi _buildTable Anda tidak perlu diubah)
     if (siswaData.isEmpty) {
       return const Center(
         child: Padding(
@@ -345,6 +390,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   }
 
   Widget _buildAction(IconData icon, String label, Color color) {
+    // ... (Fungsi _buildAction Anda tidak perlu diubah)
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.1),
