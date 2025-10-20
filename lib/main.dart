@@ -81,7 +81,6 @@ class AuthStateListener extends StatelessWidget {
   }
 }
 
-
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
 
@@ -91,34 +90,62 @@ class AdminDashboardPage extends StatefulWidget {
 
 class _AdminDashboardPageState extends State<AdminDashboardPage> {
   int _selectedIndex = 0;
+  late List<Widget> _widgetOptions;
 
-  void _onItemTapped(int index) async { // Jadikan async
-    // DIUBAH: Logika logout sekarang memanggil Supabase signOut()
-    if (index == 6) { 
-      await supabase.auth.signOut();
-      // Navigator tidak diperlukan lagi, AuthStateListener akan menangani
-      return;
-    }
+  void _navigateToSiswa(String kelasId) {
     setState(() {
-      _selectedIndex = index;
+      // Buat ulang widget DataSiswaPage dengan ID kelas yang baru
+      _widgetOptions[4] = DataSiswaPage(
+        schoolName: 'MTs Sunan Gunung Jati',
+        initialKelasId: kelasId, // <-- Masukkan ID filter
+      );
+      _selectedIndex = 4;
     });
   }
+  void _onItemTapped(int index) async {
+    if (index == 6) { // Logout
+      await supabase.auth.signOut();
+      return;
+    }
 
-  // Daftar halaman yang harus sesuai dengan indeks di sidebar
-  // Pindahkan inisialisasi ke dalam initState untuk memastikan context tersedia jika diperlukan
-  late final List<Widget> _widgetOptions;
+    if (index == 4) {
+      setState(() {
+        _widgetOptions[4] = const DataSiswaPage(
+          schoolName: 'MTs Sunan Gunung Jati',
+          initialKelasId: null, 
+        );
+        _selectedIndex = index;
+      });
+    } else {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    // KUNCI UTAMA 3: Inisialisasi widget dengan callback
     _widgetOptions = <Widget>[
-      const DashboardScreen(), // Index 0: Dashboard
-      const PageAbsensi(schoolName: 'MTs Sunan Gunung Jati'), // Index 1: Absensi
-      const PageGuru(schoolName: 'MTs Sunan Gunung Jati'), // Index 2: Guru
-      const PageKelas(schoolName: 'MTs Sunan Gunung Jati'), // Index 3: Kelas
-      const DataSiswaPage(schoolName: 'MTs Sunan Gunung Jati'), // Index 4: Siswa
-      const DataSuratPage(schoolName: 'MTs Sunan Gunung Jati'), // Index 5: Surat
-      Container(), // Index 6: Log Out, tidak perlu widget karena sudah ditangani
+      const DashboardScreen(), // Index 0
+      const PageAbsensi(schoolName: 'MTs Sunan Gunung Jati'), // Index 1
+      const PageGuru(schoolName: 'MTs Sunan Gunung Jati'), // Index 2
+
+      // Hapus 'const' karena 'onViewSiswa' bukan nilai constant
+      PageKelas(
+        schoolName: 'MTs Sunan Gunung Jati',
+        onViewSiswa: _navigateToSiswa, // <-- Kirim fungsi callback ke anak
+      ), // Index 3
+
+      // Hapus 'const' dan beri 'initialKelasId: null'
+      const DataSiswaPage(
+        schoolName: 'MTs Sunan Gunung Jati',
+        initialKelasId: null, // Awalnya tidak ada filter
+      ), // Index 4
+
+      const DataSuratPage(schoolName: 'MTs Sunan Gunung Jati'), // Index 5
+      Container(), // Index 6: Log Out
     ];
   }
 
@@ -132,7 +159,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             child: Container(
               color: const Color(0xFFf5f7fa),
               child: _selectedIndex < _widgetOptions.length
-                  ? _widgetOptions[_selectedIndex]
+                  ? _widgetOptions[_selectedIndex] // Tampilkan halaman yang dipilih
                   : const PlaceholderScreen(title: 'Halaman Tidak Ditemukan'),
             ),
           ),
