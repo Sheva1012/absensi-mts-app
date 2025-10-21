@@ -4,7 +4,6 @@ import 'package:multi_select_flutter/multi_select_flutter.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 
-// Model data untuk Kelas (tidak berubah)
 class Kelas {
   final String id;
   final String nama;
@@ -149,7 +148,6 @@ class _PageGuruState extends State<PageGuru> {
                 final id = guru['id'];
                 await supabase.from('guru').delete().eq('id', id);
 
-                // Hapus juga avatar dari storage jika ada
                 final avatarUrl = guru['avatar_url'] as String?;
                 if (avatarUrl != null && avatarUrl.isNotEmpty) {
                   final fileName = avatarUrl.split('/').last;
@@ -244,7 +242,7 @@ class _PageGuruState extends State<PageGuru> {
       alignment: Alignment.centerRight,
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green,
+          backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
           elevation: 2,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -262,10 +260,7 @@ class _PageGuruState extends State<PageGuru> {
     );
   }
 
-  // --- WIDGET YANG DIPERBARUI ---
-  // --- GANTI HANYA METHOD _buildTable() INI ---
 
-  // --- GANTI LAGI METHOD _buildTable() INI ---
 
   Widget _buildTable() {
     if (guruData.isEmpty) {
@@ -293,8 +288,6 @@ class _PageGuruState extends State<PageGuru> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          // --- PERBAIKAN ---
-          // Baris 'constraints' ini wajib ada dan tidak boleh dikomentari
           constraints: const BoxConstraints(minWidth: 1000),
 
           child: DataTable(
@@ -426,7 +419,6 @@ class _PageGuruState extends State<PageGuru> {
       ),
     );
   }
-  // --- AKHIR DARI WIDGET YANG DIPERBARUI ---
 
   Widget _buildActionButton(
     IconData icon,
@@ -452,9 +444,6 @@ class _PageGuruState extends State<PageGuru> {
   }
 }
 
-//
-// --- Class FormGuru (Tidak Ada Perubahan) ---
-//
 class FormGuru extends StatefulWidget {
   final Map<String, dynamic>? initialData;
   final Function(Map<String, dynamic>) onSave;
@@ -525,7 +514,6 @@ class _FormGuruState extends State<FormGuru> {
     super.dispose();
   }
 
-  // BARU: Fungsi untuk memilih gambar
   Future<void> _pickAvatar() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
