@@ -63,13 +63,11 @@ class _PageAbsensiState extends State<PageAbsensi> {
         created_at,
         updated_at
       ''')
-          // BARU: Filter berdasarkan tanggal yang dipilih
           .eq('tanggal', tglFilter)
-          // HAPUS: .order('tanggal', ...) // Tidak perlu lagi karena sudah difilter
           .order(
             'created_at',
             ascending: false,
-          ); // Urutkan berdasarkan jam dibuat
+          ); 
 
       absensiData = response;
       debugLog('Data absensi berhasil dimuat: ${absensiData.length} baris');
@@ -92,29 +90,23 @@ class _PageAbsensiState extends State<PageAbsensi> {
     }
   }
 
-  // --- BARU: Fungsi untuk menampilkan DatePicker ---
   Future<void> _pickDate() async {
     final newDate = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      // Anda bisa tambahkan locale: const Locale('id', 'ID'),
-      // jika sudah di-setting di MaterialApp
     );
 
     if (newDate != null && newDate != _selectedDate) {
       setState(() {
         _selectedDate = newDate;
       });
-      // Panggil fetchAbsensi lagi untuk mengambil data tanggal baru
       fetchAbsensi();
     }
   }
 
-  // Helper untuk parsing DateTime
   DateTime? _parseDateTime(dynamic value) {
-    // ... (kode helper Anda tidak berubah) ...
     if (value == null) return null;
     try {
       if (value is DateTime) {
@@ -127,9 +119,7 @@ class _PageAbsensiState extends State<PageAbsensi> {
     }
   }
 
-  // Helper untuk parsing TimeOfDay dari string (misal: "14:00:00")
   TimeOfDay? _parseTimeOfDay(dynamic value) {
-    // ... (kode helper Anda tidak berubah) ...
     if (value == null) return null;
     try {
       final s = value.toString();
@@ -147,23 +137,19 @@ class _PageAbsensiState extends State<PageAbsensi> {
     }
   }
 
-  // Helper format
   String fmtDate(dynamic value) {
-    // ... (kode helper Anda tidak berubah) ...
     final dt = _parseDateTime(value);
     if (dt == null) return '-';
     return DateFormat('dd-MM-yyyy').format(dt);
   }
 
   String fmtDateTime(dynamic value) {
-    // ... (kode helper Anda tidak berubah) ...
     final dt = _parseDateTime(value);
     if (dt == null) return '-';
     return DateFormat('dd-MM-yyyy HH:mm').format(dt.toLocal());
   }
 
   String fmtTime(dynamic value) {
-    // ... (kode helper Anda tidak berubah) ...
     final tod = _parseTimeOfDay(value);
     if (tod == null) return '-';
     return '${tod.hour.toString().padLeft(2, '0')}:${tod.minute.toString().padLeft(2, '0')}';
@@ -180,7 +166,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
           children: [
             _buildHeader(),
             const SizedBox(height: 28),
-            // --- BARU: Tambahkan filter tanggal di sini ---
             _buildDatePicker(),
             const SizedBox(height: 20), // Beri jarak ke tabel
             isLoading
@@ -193,7 +178,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
   }
 
   Widget _buildHeader() {
-    // ... (kode _buildHeader Anda tidak berubah) ...
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -235,10 +219,8 @@ class _PageAbsensiState extends State<PageAbsensi> {
     );
   }
 
-  // --- BARU: Widget untuk menampilkan filter tanggal ---
   Widget _buildDatePicker() {
     return Container(
-      // margin: const EdgeInsets.symmetric(horizontal: 4),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -266,8 +248,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
               ),
               const Spacer(),
               Text(
-                // Tampilkan tanggal yang dipilih dengan format 'Hari, dd MMMM yyyy'
-                // Pastikan locale 'id_ID' sudah ter-register di main.dart
                 DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(_selectedDate),
                 style: const TextStyle(
                   fontSize: 16,
@@ -343,14 +323,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
       );
     }
 
-    // Jika ada data, tampilkan tabel dengan perapihan
-    // ... (Sisa kode _buildTable Anda tidak berubah) ...
-    // ... (Pastikan kolom 'Tanggal' dihapus dari DataTable jika tidak diperlukan lagi) ...
-    // --- PERTIMBANGAN ---
-    // Kolom 'Tanggal' di dalam tabel mungkin tidak Anda perlukan lagi
-    // karena semua data sudah pasti dari tanggal yang dipilih di filter.
-    // Jika ingin menghapusnya, hapus 'DataColumn' dan 'DataCell' untuk tanggal.
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -387,9 +359,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ),
-              // PERHATIKAN: Kolom Tanggal ini sekarang menampilkan tanggal
-              // yang sama untuk semua baris. Anda bisa menghapusnya
-              // jika dirasa tidak perlu.
               DataColumn(
                 label: SizedBox(
                   width: 80,
@@ -646,10 +615,7 @@ class _PageAbsensiState extends State<PageAbsensi> {
     );
   }
 
-  // BARU: BOTTOM SHEET UNTUK EDIT DATA
   void _showEditBottomSheet(BuildContext context, Map<String, dynamic> a) {
-    // ... (Semua kode _showEditBottomSheet Anda tidak berubah) ...
-    // Ambil data awal
     final String namaSiswa = (a['siswa'] is Map)
         ? (a['siswa']['nama'] ?? '-')
         : '-';
@@ -682,7 +648,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
       }
     }
 
-    // Helper untuk showTimePicker
     Future<void> pickTime(
       BuildContext context,
       StateSetter formSetState,
@@ -710,8 +675,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        // Gunakan StatefulBuilder agar state form (tanggal, status, dll)
-        // terpisah dari state utama halaman
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter formSetState) {
             return DraggableScrollableSheet(
@@ -1046,8 +1009,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
   }
 
   void _showDetailBottomSheet(BuildContext context, Map<String, dynamic> a) {
-    // ... (Semua kode _showDetailBottomSheet Anda tidak berubah) ...
-    // Logika defensive Anda di sini sudah sangat bagus!
     final String namaSiswa = (a['siswa'] is Map)
         ? (a['siswa']['nama'] ?? '-')
         : '-';
@@ -1127,7 +1088,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Summary card
                           Card(
                             elevation: 2,
                             shape: RoundedRectangleBorder(
@@ -1232,7 +1192,6 @@ class _PageAbsensiState extends State<PageAbsensi> {
   }
 
   Widget _buildDetailRow(IconData icon, String title, String value) {
-    // ... (kode _buildDetailRow Anda tidak berubah) ...
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
