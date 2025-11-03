@@ -3,9 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 
+// --- (TAMBAHAN) IMPORTS UNTUK QR CODE, PDF, DAN UNDUH ---
+import 'package:barcode_widget/barcode_widget.dart';
+import 'package:screenshot/screenshot.dart';
+import 'package:universal_html/html.dart' as html;
+import 'dart:typed_data';
+import 'dart:convert';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+// --- AKHIR TAMBAHAN IMPORTS ---
+
 class DataSiswaPage extends StatefulWidget {
   final String schoolName;
-  final String? initialKelasId; 
+  final String? initialKelasId;
 
   const DataSiswaPage({
     super.key,
@@ -29,6 +40,18 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   int? selectedKelasId;
   String? selectedStatus;
   final TextEditingController searchController = TextEditingController();
+
+  // Helper untuk mendapatkan nama kelas yang dipilih (untuk judul PDF)
+  String get _selectedKelasNama {
+    if (selectedKelasId == null) return "Semua Kelas";
+    try {
+      return kelasList.firstWhere(
+        (k) => k['id'] == selectedKelasId,
+      )['nama_kelas'];
+    } catch (e) {
+      return "Kelas";
+    }
+  }
 
   @override
   void initState() {
@@ -125,19 +148,22 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
   }) async {
     try {
       if (isEdit) {
-        await supabase.from('siswa').update({
-          'nis': nis,
-          'nama': nama,
-          'kelas_id': kelasId, 
-          'orang_tua_nama': ortuNama,
-          'orang_tua_nomor': ortuNomor,
-          'status': status,
-        }).eq('id', siswaId!);
+        await supabase
+            .from('siswa')
+            .update({
+              'nis': nis,
+              'nama': nama,
+              'kelas_id': kelasId,
+              'orang_tua_nama': ortuNama,
+              'orang_tua_nomor': ortuNomor,
+              'status': status,
+            })
+            .eq('id', siswaId!);
       } else {
         await supabase.from('siswa').insert({
           'nis': nis,
           'nama': nama,
-          'kelas_id': kelasId, 
+          'kelas_id': kelasId,
           'orang_tua_nama': ortuNama,
           'orang_tua_nomor': ortuNomor,
           'status': status,
@@ -145,14 +171,20 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(isEdit ? 'Data berhasil diperbarui' : 'Data siswa berhasil ditambahkan')),
+        SnackBar(
+          content: Text(
+            isEdit
+                ? 'Data berhasil diperbarui'
+                : 'Data siswa berhasil ditambahkan',
+          ),
+        ),
       );
 
       fetchSiswa();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menyimpan data: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal menyimpan data: $e')));
     }
   }
 
@@ -161,10 +193,18 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Konfirmasi'),
-        content: const Text('Apakah Anda yakin ingin menghapus data siswa ini?'),
+        content: const Text(
+          'Apakah Anda yakin ingin menghapus data siswa ini?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Hapus')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus'),
+          ),
         ],
       ),
     );
@@ -176,12 +216,20 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
 
   void _showSiswaForm({Map<String, dynamic>? siswa}) {
     final isEdit = siswa != null;
-    final TextEditingController nisController = TextEditingController(text: siswa?['nis'] ?? '');
-    final TextEditingController namaController = TextEditingController(text: siswa?['nama'] ?? '');
-    final TextEditingController ortuNamaController = TextEditingController(text: siswa?['orang_tua_nama'] ?? '');
-    final TextEditingController ortuNomorController = TextEditingController(text: siswa?['orang_tua_nomor'] ?? '');
-    
-    int? kelasId = siswa?['kelas_id']; 
+    final TextEditingController nisController = TextEditingController(
+      text: siswa?['nis'] ?? '',
+    );
+    final TextEditingController namaController = TextEditingController(
+      text: siswa?['nama'] ?? '',
+    );
+    final TextEditingController ortuNamaController = TextEditingController(
+      text: siswa?['orang_tua_nama'] ?? '',
+    );
+    final TextEditingController ortuNomorController = TextEditingController(
+      text: siswa?['orang_tua_nomor'] ?? '',
+    );
+
+    int? kelasId = siswa?['kelas_id'];
     String? status = siswa?['status'];
 
     showDialog(
@@ -191,46 +239,66 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
           title: Text(isEdit ? "Edit Siswa" : "Tambah Siswa"),
           content: SingleChildScrollView(
             child: Column(
+              mainAxisSize: MainAxisSize.min, // Agar pas
               children: [
-                TextField(controller: nisController, decoration: const InputDecoration(labelText: 'NIS')),
+                TextField(
+                  controller: nisController,
+                  decoration: const InputDecoration(labelText: 'NIS'),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: namaController, decoration: const InputDecoration(labelText: 'Nama')),
+                TextField(
+                  controller: namaController,
+                  decoration: const InputDecoration(labelText: 'Nama'),
+                ),
                 const SizedBox(height: 8),
-                
                 DropdownButtonFormField<int>(
                   value: kelasId, // value adalah int?
                   hint: const Text('Pilih Kelas'),
                   items: [
-                                      const DropdownMenuItem<int>(
+                    const DropdownMenuItem<int>(
                       value: null,
-                      child: Text("(Belum ada kelas)"), 
+                      child: Text("(Belum ada kelas)"),
                     ),
-                                        ...kelasList
-                        .map((k) => DropdownMenuItem(
-                              value: k['id'] as int, 
-                              child: Text(k['nama_kelas']),
-                            ))
+                    ...kelasList
+                        .map(
+                          (k) => DropdownMenuItem(
+                            value: k['id'] as int,
+                            child: Text(k['nama_kelas']),
+                          ),
+                        )
                         .toList(),
                   ],
                   onChanged: (val) => kelasId = val,
                   decoration: const InputDecoration(labelText: 'Kelas'),
                 ),
                 const SizedBox(height: 8),
-                TextField(controller: ortuNamaController, decoration: const InputDecoration(labelText: 'Nama Orang Tua')),
+                TextField(
+                  controller: ortuNamaController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nama Orang Tua',
+                  ),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: ortuNomorController, decoration: const InputDecoration(labelText: 'Nomor WA Orang Tua')),
+                TextField(
+                  controller: ortuNomorController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nomor WA Orang Tua',
+                  ),
+                ),
                 const SizedBox(height: 8),
-                
                 DropdownButtonFormField<String>(
                   value: status, // value adalah String?
                   hint: const Text('Pilih Status'),
                   items: const [
-                                        DropdownMenuItem<String>(
+                    DropdownMenuItem<String>(
                       value: null,
                       child: Text("(Belum ada status)"),
                     ),
-                                    DropdownMenuItem(value: 'aktif', child: Text('Aktif')), 
-                    DropdownMenuItem(value: 'tidak aktif', child: Text('Tidak Aktif')),
+                    DropdownMenuItem(value: 'aktif', child: Text('Aktif')),
+                    DropdownMenuItem(
+                      value: 'tidak aktif',
+                      child: Text('Tidak Aktif'),
+                    ),
                     DropdownMenuItem(value: 'lulus', child: Text('Lulus')),
                   ],
                   onChanged: (val) => status = val,
@@ -240,7 +308,10 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Batal"),
+            ),
             ElevatedButton(
               onPressed: () async {
                 await _saveSiswa(
@@ -251,7 +322,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                   kelasId: kelasId,
                   ortuNama: ortuNamaController.text,
                   ortuNomor: ortuNomorController.text,
-                  status: status, 
+                  status: status,
                 );
                 if (!mounted) return;
                 Navigator.pop(context);
@@ -263,21 +334,218 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       },
     );
   }
+
+  // FUNGSI UNTUK MENGUNDUH GAMBAR BARCODE (WEB)
+  Future<void> _downloadBarcode(Uint8List bytes, String filename) async {
+    final base64 = base64Encode(bytes);
+    final href = 'data:application/octet-stream;base64,$base64';
+    final anchor = html.AnchorElement(href: href)
+      ..setAttribute("download", filename)
+      ..click();
+  }
+
+  // FUNGSI UNTUK MENAMPILKAN DIALOG QR CODE (PER SISWA)
+  void _showBarcodeDialog(Map<String, dynamic> siswa) {
+    final String nis = siswa['nis']?.toString() ?? '';
+    final String nama = siswa['nama'] ?? 'Nama Tidak Ditemukan';
+
+    if (nis.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Siswa ini tidak memiliki NIS untuk dibuatkan barcode.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final ScreenshotController screenshotController = ScreenshotController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("QR Code Siswa"),
+          content: SizedBox(
+            width: 350,
+            child: Screenshot(
+              controller: screenshotController,
+              child: Container(
+                color: Colors.white, // Background putih untuk diunduh
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      nama,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "NIS: $nis",
+                      style: const TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 24),
+                    // UBAH KE QR CODE
+                    BarcodeWidget(
+                      barcode: Barcode.qrCode(), // Tipe QR Code
+                      data: nis,
+                      width: 250, // Ukuran persegi
+                      height: 250, // Ukuran persegi
+                      drawText: false, // Teks sudah ada di atas
+                      color: Colors.black,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Tutup"),
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.download),
+              label: const Text("Unduh"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final bytes = await screenshotController.capture(
+                  delay: const Duration(milliseconds: 10),
+                );
+                if (bytes != null) {
+                  final safeFilename = nama
+                      .replaceAll(' ', '_')
+                      .replaceAll(RegExp(r'[^\w.-]'), '');
+                  await _downloadBarcode(bytes, '$safeFilename-qrcode.png');
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // FUNGSI UNTUK MEMBUAT PDF (PER KELAS)
+  Future<void> _generateBarcodePdf() async {
+    final List<Map<String, dynamic>> siswaDiKelas = siswaData;
+    final String namaKelas = _selectedKelasNama;
+
+    if (siswaDiKelas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak ada data siswa untuk dicetak di kelas ini.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final pdf = pw.Document();
+
+    List<pw.Widget> barcodeWidgets = [];
+    for (final siswa in siswaDiKelas) {
+      final String nis = siswa['nis']?.toString() ?? '';
+      final String nama = siswa['nama'] ?? 'Siswa';
+
+      if (nis.isNotEmpty) {
+        barcodeWidgets.add(
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300),
+              borderRadius: pw.BorderRadius.circular(5),
+            ),
+            child: pw.Column(
+              mainAxisSize: pw.MainAxisSize.min,
+              children: [
+                pw.Text(
+                  nama,
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  textAlign: pw.TextAlign.center,
+                ),
+                pw.SizedBox(height: 2),
+                pw.Text("NIS: $nis", style: const pw.TextStyle(fontSize: 8)),
+                pw.SizedBox(height: 5),
+                // UBAH KE QR CODE
+                pw.BarcodeWidget(
+                  barcode: pw.Barcode.qrCode(), // Tipe QR Code
+                  data: nis,
+                  width: 80, // Ukuran persegi
+                  height: 80, // Ukuran persegi
+                  drawText: false,
+                  color: PdfColors.black,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        header: (context) => pw.Header(
+          level: 0,
+          child: pw.Text(
+            "Daftar QR Code Siswa - $namaKelas",
+            style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+          ),
+        ),
+        build: (context) => [
+          pw.GridView(
+            crossAxisCount: 3, // 3 barcode per baris
+            childAspectRatio: 1.2, // UBAH: Rasio lebih persegi
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            children: barcodeWidgets,
+          ),
+        ],
+      ),
+    );
+
+    // Tampilkan layar Print/Save PDF
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
+  }
+
   Future<void> _importCSV() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['csv']);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
     if (result != null && result.files.single.path != null) {
       final file = File(result.files.single.path!);
       final bytes = await file.readAsBytes();
 
       try {
-        await supabase.storage.from('uploads').uploadBinary('import_siswa.csv', bytes);
+        await supabase.storage
+            .from('uploads')
+            .uploadBinary('import_siswa.csv', bytes);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('CSV berhasil diunggah ke storage')),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal upload CSV: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal upload CSV: $e')));
       }
     }
   }
@@ -299,9 +567,10 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
           children: [
             _buildHeader(),
             const SizedBox(height: 16),
+            // BARIS TOMBOL AKSI UTAMA
             Row(
-              mainAxisAlignment: MainAxisAlignment.end, 
-                   children: [
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
                 ElevatedButton.icon(
                   onPressed: () => _showSiswaForm(),
                   icon: const Icon(Icons.add),
@@ -316,6 +585,20 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                   onPressed: _importCSV,
                   icon: const Icon(Icons.file_upload),
                   label: const Text("Import CSV"),
+                ),
+                const SizedBox(width: 16),
+                // TOMBOL CETAK QR CODE KELAS
+                ElevatedButton.icon(
+                  onPressed: selectedKelasId == null
+                      ? null // Nonaktif jika "Semua Kelas" dipilih
+                      : _generateBarcodePdf,
+                  icon: const Icon(Icons.print),
+                  label: const Text("Cetak QR Code Kelas"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade300,
+                  ),
                 ),
               ],
             ),
@@ -525,21 +808,61 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1200),
+          constraints: const BoxConstraints(minWidth: 1350), // Lebar minimum
           child: DataTable(
             columnSpacing: 24,
             headingRowHeight: 56,
             dataRowHeight: 64,
             headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
             columns: const [
-              DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('NIS', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Nama', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Kelas', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Nama Ortu', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('No. Ortu', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(
+                label: Text(
+                  'No',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'NIS',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Nama',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Kelas',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Nama Ortu',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'No. Ortu',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Status',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Aksi',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
             rows: List.generate(siswaData.length, (i) {
               final s = siswaData[i];
@@ -552,12 +875,30 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                   DataCell(Text('${s['orang_tua_nama'] ?? '-'}')),
                   DataCell(Text('${s['orang_tua_nomor'] ?? '-'}')),
                   DataCell(Text('${s['status'] ?? '-'}')),
+                  // SEL AKSI DENGAN 3 TOMBOL
                   DataCell(
                     Row(
                       children: [
-                        _buildAction(Icons.edit, 'Edit', Colors.blue, onPressed: () => _showSiswaForm(siswa: s)),
+                        _buildAction(
+                          Icons.qr_code_2,
+                          'QR Code',
+                          Colors.teal,
+                          onPressed: () => _showBarcodeDialog(s),
+                        ),
                         const SizedBox(width: 8),
-                        _buildAction(Icons.delete, 'Hapus', Colors.red, onPressed: () => _deleteSiswa(s['id'])),
+                        _buildAction(
+                          Icons.edit,
+                          'Edit',
+                          Colors.blue,
+                          onPressed: () => _showSiswaForm(siswa: s),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildAction(
+                          Icons.delete,
+                          'Hapus',
+                          Colors.red,
+                          onPressed: () => _deleteSiswa(s['id']),
+                        ),
                       ],
                     ),
                   ),
@@ -570,7 +911,12 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
     );
   }
 
-  Widget _buildAction(IconData icon, String label, Color color, {VoidCallback? onPressed}) {
+  Widget _buildAction(
+    IconData icon,
+    String label,
+    Color color, {
+    VoidCallback? onPressed,
+  }) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.1),

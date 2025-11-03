@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'data_siswa.dart';
+import 'data_siswa.dart'; // Import ini ada di kode asli Anda
 
 class PageKelas extends StatefulWidget {
   final String schoolName;
@@ -31,13 +31,14 @@ class _PageKelasState extends State<PageKelas> {
   Future<void> fetchData() async {
     setState(() => isLoading = true);
     try {
+      // select() akan mengambil semua kolom, termasuk 'jam_pulang'
       final kelasResponse = await supabase
           .from('kelas')
           .select()
           .order('id', ascending: true);
       // ---------------------------------
 
-      // Ambil data guru (bisa juga difilter per sekolah jika perlu)
+      // Ambil data guru
       final guruResponse = await supabase.from('guru').select('id, nama');
 
       setState(() {
@@ -53,10 +54,12 @@ class _PageKelasState extends State<PageKelas> {
     }
   }
 
+  // --- DIUBAH: Tambahkan parameter 'jamPulang' ---
   Future<void> updateKelas(
     Map<String, dynamic> kelas,
     String namaKelas,
     String jamMasuk,
+    String jamPulang, // <-- BARU
     String? waliGuruId,
   ) async {
     try {
@@ -65,6 +68,7 @@ class _PageKelasState extends State<PageKelas> {
           .update({
             'nama_kelas': namaKelas,
             'jam_masuk': jamMasuk,
+            'jam_pulang': jamPulang, // <-- BARU
             'wali_kelas': waliGuruId,
           })
           .eq('id', kelas['id']);
@@ -72,7 +76,7 @@ class _PageKelasState extends State<PageKelas> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Data kelas berhasil diperbarui')),
       );
-      fetchData();
+      fetchData(); // Muat ulang data untuk menampilkan perubahan
     } catch (e) {
       print('Error updating data: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -87,6 +91,10 @@ class _PageKelasState extends State<PageKelas> {
     );
     final TextEditingController jamMasukController = TextEditingController(
       text: kelas['jam_masuk'] ?? '',
+    );
+    // --- BARU: Controller untuk Jam Pulang ---
+    final TextEditingController jamPulangController = TextEditingController(
+      text: kelas['jam_pulang'] ?? '',
     );
     String? selectedGuruId = kelas['wali_kelas'];
 
@@ -121,6 +129,7 @@ class _PageKelasState extends State<PageKelas> {
                           initialTime: TimeOfDay.now(),
                         );
                         if (time != null) {
+                          // Format H:M menjadi HH:MM
                           jamMasukController.text =
                               '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
                         }
@@ -128,6 +137,33 @@ class _PageKelasState extends State<PageKelas> {
                     ),
                   ),
                 ),
+
+                // --- BARU: TextField untuk Jam Pulang ---
+                const SizedBox(height: 16),
+                TextField(
+                  controller: jamPulangController,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Jam Pulang',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.access_time),
+                      onPressed: () async {
+                        final time = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.now(),
+                        );
+                        if (time != null) {
+                          // Format H:M menjadi HH:MM
+                          jamPulangController.text =
+                              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                        }
+                      },
+                    ),
+                  ),
+                ),
+
+                // --- AKHIR BARU ---
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: selectedGuruId,
@@ -156,15 +192,23 @@ class _PageKelasState extends State<PageKelas> {
             ElevatedButton(
               onPressed: () {
                 final nama = namaController.text.trim();
-                final jam = jamMasukController.text.trim();
-                if (nama.isNotEmpty && jam.isNotEmpty) {
-                  updateKelas(kelas, nama, jam, selectedGuruId);
+                final jamMasuk = jamMasukController.text.trim();
+                // --- BARU: Ambil nilai jam pulang ---
+                final jamPulang = jamPulangController.text.trim();
+
+                // --- DIUBAH: Tambahkan validasi jamPulang ---
+                if (nama.isNotEmpty &&
+                    jamMasuk.isNotEmpty &&
+                    jamPulang.isNotEmpty) {
+                  // --- DIUBAH: Kirim jamPulang ke fungsi update ---
+                  updateKelas(kelas, nama, jamMasuk, jamPulang, selectedGuruId);
                   Navigator.pop(context);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text(
-                        'Nama kelas dan jam masuk tidak boleh kosong',
+                        // --- DIUBAH: Pesan error ---
+                        'Nama, jam masuk, dan jam pulang tidak boleh kosong',
                       ),
                     ),
                   );
@@ -267,7 +311,8 @@ class _PageKelasState extends State<PageKelas> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1000),
+          // --- DIUBAH: Perlebar minWidth untuk kolom baru ---
+          constraints: const BoxConstraints(minWidth: 1100),
           child: DataTable(
             columnSpacing: 24,
             headingRowHeight: 56,
@@ -298,6 +343,14 @@ class _PageKelasState extends State<PageKelas> {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
+              // --- BARU: Kolom Jam Pulang ---
+              DataColumn(
+                label: Text(
+                  'Jam Pulang',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              // --- AKHIR BARU ---
               DataColumn(
                 label: Text(
                   'Aksi',
@@ -317,6 +370,9 @@ class _PageKelasState extends State<PageKelas> {
                   DataCell(Text(s['nama_kelas'] ?? '-')),
                   DataCell(Text(wali['nama'] ?? '-')),
                   DataCell(Text(s['jam_masuk'] ?? '-')),
+                  // --- BARU: Sel Jam Pulang ---
+                  DataCell(Text(s['jam_pulang'] ?? '-')),
+                  // --- AKHIR BARU ---
                   DataCell(
                     Row(
                       children: [
@@ -324,8 +380,6 @@ class _PageKelasState extends State<PageKelas> {
                           _showEditDialog(s);
                         }),
                         const SizedBox(width: 8),
-
-                        // --- PERBAIKAN NAVIGASI ---
                         _buildAction(
                           Icons.visibility,
                           'Lihat',
