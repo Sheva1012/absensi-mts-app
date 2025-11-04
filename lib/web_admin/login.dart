@@ -26,9 +26,30 @@ class AppStyles {
   static final inputDecoration = InputDecoration(
     filled: true,
     fillColor: Colors.grey.shade100,
-    border: OutlineInputBorder(
+    enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide.none,
+      borderSide: const BorderSide(
+        color: Color(0xFFB0BEC5), // abu netral untuk state normal
+        width: 1.2,
+      ),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(
+        color: AppColors.primary, // biru saat fokus
+        width: 2,
+      ),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(
+        color: AppColors.error, // merah saat error
+        width: 1.5,
+      ),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: AppColors.error, width: 2),
     ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
   );
