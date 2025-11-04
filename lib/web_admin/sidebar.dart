@@ -47,7 +47,7 @@ class _SidebarState extends State<Sidebar> {
             curve: Curves.easeInOut,
             padding: EdgeInsets.symmetric(
               vertical: 15,
-              horizontal: _isCollapsed ? 15.5`` : 15.0,
+              horizontal: _isCollapsed ? 15.5 : 15.0,
             ),
             child: Row(
               // Jangan gunakan MainAxisAlignment.center, biarkan padding yg mengatur
