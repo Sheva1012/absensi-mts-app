@@ -3,8 +3,13 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'absensi_controller.dart'; // Import controller
 
+// Pengaturan Locale untuk DateFormat
+// Pastikan memanggil initializeDateFormatting() di main() jika ini gagal.
+// Namun, di lingkungan Flutter modern, ini seringkali tidak diperlukan.
+// Locale 'id_ID' akan digunakan secara default oleh DateFormat di bawah.
+
 // 1. MAIN PAGE WIDGET (Entry Point)
-//-------------------------------------------------------------------
+// -------------------------------------------------------------------
 class PageAbsensi extends StatelessWidget {
   final String schoolName;
 
@@ -13,7 +18,7 @@ class PageAbsensi extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      // PERUBAHAN: Hapus '..fetchAbsensi()' karena constructor sekarang
+      // PERUBAHAN: Hapus '..fetchAbsensi()' karena constructor controller
       // memanggil _initializeData() secara internal.
       create: (context) => AbsensiController(schoolName: schoolName),
       child: Consumer<AbsensiController>(
@@ -64,14 +69,13 @@ class PageAbsensi extends StatelessWidget {
 }
 
 // 2. HEADER WIDGET
-//-------------------------------------------------------------------
+// -------------------------------------------------------------------
 class _AbsensiHeader extends StatelessWidget {
   final String schoolName;
   const _AbsensiHeader({required this.schoolName});
 
   @override
   Widget build(BuildContext context) {
-    // ... (Tidak ada perubahan di sini)
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -114,13 +118,17 @@ class _AbsensiHeader extends StatelessWidget {
   }
 }
 
-// --- 3. DATE PICKER WIDGET (Diseragamkan) ---
+// 3. DATE PICKER WIDGET (Diseragamkan)
+// -------------------------------------------------------------------
 class _AbsensiDatePicker extends StatelessWidget {
   final AbsensiController controller;
   const _AbsensiDatePicker({required this.controller});
 
   @override
   Widget build(BuildContext context) {
+    // Memastikan DateFormat menggunakan 'id_ID'
+    final dateFormatter = DateFormat('EEEE, dd MMMM yyyy', 'id_ID');
+
     return Container(
       height: 60, // ✅ Tinggi diseragamkan
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -149,10 +157,7 @@ class _AbsensiDatePicker extends StatelessWidget {
             const SizedBox(width: 16),
             Expanded(
               child: Text(
-                DateFormat(
-                  'EEEE, dd MMMM yyyy',
-                  'id_ID',
-                ).format(controller.selectedDate),
+                dateFormatter.format(controller.selectedDate),
                 style: const TextStyle(
                   fontSize: 16,
                   color: Colors.black87,
@@ -169,7 +174,8 @@ class _AbsensiDatePicker extends StatelessWidget {
   }
 }
 
-// --- 4. KELAS FILTER DROPDOWN (Diseragamkan) ---
+// 4. KELAS FILTER DROPDOWN (Diseragamkan)
+// -------------------------------------------------------------------
 class _KelasFilterDropdown extends StatelessWidget {
   final AbsensiController controller;
   const _KelasFilterDropdown({required this.controller});
@@ -239,42 +245,30 @@ class _KelasFilterDropdown extends StatelessWidget {
   }
 }
 
-// --- AKHIR WIDGET BARU ---
-
-// 4. CONTENT WIDGET (LOGIKA TAMPIL DATA/KOSONG)
-//-------------------------------------------------------------------
+// 5. CONTENT WIDGET (LOGIKA TAMPIL DATA/KOSONG)
+// -------------------------------------------------------------------
 class _AbsensiContent extends StatelessWidget {
-  // ... (Tidak ada perubahan di sini)
   final AbsensiController controller;
   const _AbsensiContent({required this.controller});
 
   @override
   Widget build(BuildContext context) {
     if (controller.absensiData.isEmpty) {
-      // PERUBAHAN: Tampilkan pesan berbeda jika data siswa ada tapi absensi 0
-      // Ini terjadi jika fetchSiswa berhasil tapi filter absensi 0
-      // Dengan logika baru (ambil siswa dulu), jika _absensiData kosong,
-      // berarti TIDAK ADA SISWA SAMA SEKALI di filter tsb.
       return _EmptyDataView(controller: controller);
     }
     return _AbsensiDataTable(controller: controller);
   }
 }
 
-// 5. EMPTY STATE WIDGET
-//-------------------------------------------------------------------
+// 6. EMPTY STATE WIDGET
+// -------------------------------------------------------------------
 class _EmptyDataView extends StatelessWidget {
-  // ... (Tidak ada perubahan di sini)
   final AbsensiController controller;
   const _EmptyDataView({required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    // Pesan disesuaikan, karena sekarang bisa berarti "Tidak ada siswa"
-    // atau "Tidak ada data absensi"
-    final String pesan = controller.selectedKelasId == null
-        ? 'Belum ada data siswa di sekolah ini.'
-        : 'Tidak ditemukan data siswa untuk kelas ini.';
+    final dateFormatter = DateFormat('dd MMMM yyyy', 'id_ID');
 
     return Center(
       child: Container(
@@ -296,12 +290,9 @@ class _EmptyDataView extends StatelessWidget {
           children: [
             const Icon(Icons.info_outline, size: 48, color: Colors.blueGrey),
             const SizedBox(height: 16),
-            Text(
-              // Judul disesuaikan
-              controller.absensiData.isEmpty
-                  ? 'Tidak Ada Siswa'
-                  : 'Belum ada data absensi',
-              style: const TextStyle(
+            const Text(
+              'Belum ada data absensi',
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.black87,
@@ -309,10 +300,7 @@ class _EmptyDataView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              // Teks disesuaikan
-              controller.absensiData.isEmpty
-                  ? pesan
-                  : 'Tidak ditemukan data untuk tanggal ${DateFormat('dd MMMM yyyy', 'id_ID').format(controller.selectedDate)}.',
+              'Tidak ditemukan data untuk tanggal ${dateFormatter.format(controller.selectedDate)}.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.grey),
             ),
@@ -337,10 +325,9 @@ class _EmptyDataView extends StatelessWidget {
   }
 }
 
-// 6. DATA TABLE WIDGET
-//-------------------------------------------------------------------
+// 7. DATA TABLE WIDGET
+// -------------------------------------------------------------------
 class _AbsensiDataTable extends StatelessWidget {
-  // ... (Logika parsing 'siswa' sudah aman)
   final AbsensiController controller;
   const _AbsensiDataTable({required this.controller});
 
@@ -387,7 +374,6 @@ class _AbsensiDataTable extends StatelessWidget {
 
   // Helper untuk membuat kolom
   List<DataColumn> _buildTableColumns() {
-    // ... (Tidak ada perubahan di sini)
     return const [
       DataColumn(
         label: Text(
@@ -467,22 +453,16 @@ class _AbsensiDataTable extends StatelessWidget {
   // Helper untuk membuat baris
   DataRow _buildDataRow(BuildContext context, Map<String, dynamic> a) {
     // Parsing 'siswa' tetap aman karena 'siswa' bisa null
-    // (tapi dengan logika baru, 'siswa' TIDAK AKAN PERNAH null)
-    final String namaSiswa = (a['siswa'] is Map)
-        ? (a['siswa']['nama'] ?? '-')
-        : '-';
+    final String namaSiswa =
+        (a['siswa'] is Map) ? (a['siswa']['nama'] ?? '-') : '-';
     final String tanggal = controller.fmtDate(a['tanggal']);
     final String status = a['status'] ?? '-';
     final String masuk = controller.fmtTime(a['waktu_masuk']);
     final String pulang = controller.fmtTime(a['waktu_pulang']);
     final String keterangan = a['keterangan'] ?? '-';
-    final hasSurat =
-        a['surat'] != null &&
-            a['surat'].toString().isNotEmpty &&
-            a['surat'].toString() != '-';
-
-    // ID Absensi BISA JADI NULL (jika default "Alfa")
-    final dynamic absensiId = a['id'];
+    final hasSurat = a['surat'] != null &&
+        a['surat'].toString().isNotEmpty &&
+        a['surat'].toString() != '-';
 
     Color getStatusColor(String status) {
       switch (status.toLowerCase()) {
@@ -582,35 +562,23 @@ class _AbsensiDataTable extends StatelessWidget {
               children: [
                 _buildAction(
                   Icons.edit,
-                  // Teks tombol edit disesuaikan
-                  absensiId == null ? 'Absen' : 'Edit',
+                  'Edit',
                   Colors.blue,
                   onPressed: () {
-                    controller.debugLog('Edit pressed for id=$absensiId');
-                    // 'a' sekarang berisi data siswa + data absensi (jika ada)
+                    controller.debugLog('Edit pressed for id=${a['id']}');
                     _showEditBottomSheet(context, a, controller);
                   },
                 ),
                 const SizedBox(width: 8),
-                // Tombol detail dinonaktifkan jika data absensi belum ada
-                if (absensiId != null)
-                  _buildAction(
-                    Icons.visibility,
-                    'Detail',
-                    Colors.blue.shade700,
-                    onPressed: () {
-                      controller.debugLog('Detail pressed for id=$absensiId');
-                      _showDetailBottomSheet(context, a, controller);
-                    },
-                  )
-                else
-                  // Tombol nonaktif palsu
-                  _buildAction(
-                    Icons.visibility_off,
-                    'Detail',
-                    Colors.grey,
-                    onPressed: () {}, // Tidak melakukan apa-apa
-                  ),
+                _buildAction(
+                  Icons.visibility,
+                  'Detail',
+                  Colors.blue.shade700,
+                  onPressed: () {
+                    controller.debugLog('Detail pressed for id=${a['id']}');
+                    _showDetailBottomSheet(context, a, controller);
+                  },
+                ),
               ],
             ),
           ),
@@ -626,7 +594,6 @@ class _AbsensiDataTable extends StatelessWidget {
     Color color, {
     required VoidCallback onPressed,
   }) {
-    // ... (Tidak ada perubahan di sini)
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color.withOpacity(0.12),
@@ -646,14 +613,12 @@ class _AbsensiDataTable extends StatelessWidget {
   }
 
   // --- LOGIKA MENAMPILKAN BOTTOM SHEET ---
-  // (Tetap di sini karena terkait erat dengan aksi tabel)
 
   void _showEditBottomSheet(
     BuildContext context,
     Map<String, dynamic> a,
     AbsensiController controller,
   ) {
-    // ... (Tidak ada perubahan di sini)
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -670,7 +635,6 @@ class _AbsensiDataTable extends StatelessWidget {
     Map<String, dynamic> a,
     AbsensiController controller,
   ) {
-    // ... (Tidak ada perubahan di sini)
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -683,10 +647,9 @@ class _AbsensiDataTable extends StatelessWidget {
   }
 }
 
-// 7. WIDGET KONTEN DETAIL BOTTOM SHEET
-//-------------------------------------------------------------------
+// 8. WIDGET KONTEN DETAIL BOTTOM SHEET
+// -------------------------------------------------------------------
 class _DetailAbsensiSheet extends StatelessWidget {
-  // ... (Tidak ada perubahan di sini)
   final AbsensiController controller;
   final Map<String, dynamic> absensiData;
 
@@ -699,12 +662,10 @@ class _DetailAbsensiSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     // Ambil data dan format dari controller
     final a = absensiData;
-    final String namaSiswa = (a['siswa'] is Map)
-        ? (a['siswa']['nama'] ?? '-')
-        : '-';
-    final String guruNama = (a['guru'] is Map)
-        ? (a['guru']['nama'] ?? '-')
-        : '-';
+    final String namaSiswa =
+        (a['siswa'] is Map) ? (a['siswa']['nama'] ?? '-') : '-';
+    final String guruNama =
+        (a['guru'] is Map) ? (a['guru']['nama'] ?? '-') : '-';
     final String tanggal = controller.fmtDate(a['tanggal']);
     final String status = a['status'] ?? '-';
     final String waktuMasuk = controller.fmtTime(a['waktu_masuk']);
@@ -860,7 +821,6 @@ class _DetailAbsensiSheet extends StatelessWidget {
 
   // Helper untuk baris detail
   Widget _buildDetailRow(IconData icon, String title, String value) {
-    // ... (Tidak ada perubahan di sini)
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -884,10 +844,9 @@ class _DetailAbsensiSheet extends StatelessWidget {
   }
 }
 
-// 8. WIDGET KONTEN EDIT BOTTOM SHEET (STATEFUL)
-//-------------------------------------------------------------------
+// 9. WIDGET KONTEN EDIT BOTTOM SHEET (STATEFUL)
+// -------------------------------------------------------------------
 class _EditAbsensiSheet extends StatefulWidget {
-  // ... (Tidak ada perubahan di sini)
   final AbsensiController controller;
   final Map<String, dynamic> absensiData;
 
@@ -916,17 +875,11 @@ class _EditAbsensiSheetState extends State<_EditAbsensiSheet> {
     final a = widget.absensiData;
     final controller = widget.controller;
 
-    // 'status' bisa 'alfa' dari data default
     selectedStatus = a['status'] ?? 'hadir';
-    // 'tanggal' akan selalu ada (dari tglFilter)
     selectedTanggal =
         controller.parseDateTime(a['tanggal']) ?? controller.selectedDate;
-    
-    // waktuMasuk/Pulang bisa jadi null
     waktuMasuk = controller.parseTimeOfDay(a['waktu_masuk']);
     waktuPulang = controller.parseTimeOfDay(a['waktu_pulang']);
-    
-    // keterangan bisa jadi null atau ''
     keteranganController = TextEditingController(text: a['keterangan'] ?? '');
   }
 
@@ -963,47 +916,24 @@ class _EditAbsensiSheetState extends State<_EditAbsensiSheet> {
     }
   }
 
-  // --- PERUBAHAN BESAR DI SINI ---
-  // Logika simpan data (Create vs Update)
+  // Logika simpan data
   Future<void> _saveChanges() async {
     setState(() => isSaving = true);
-
-    // Ambil ID absensi dan ID siswa
-    // absensiId BISA JADI NULL (jika ini data "Alfa" default)
-    final dynamic absensiId = widget.absensiData['id'];
-    
-    // siswa_id / siswa['id'] PASTI ADA
-    final int siswaId = widget.absensiData['siswa_id'] ?? 
-                        widget.absensiData['siswa']['id'];
-
     try {
-      if (absensiId == null) {
-        // 1. CREATE: Ini adalah data "Alfa" default, jadi kita CREATE
-        await widget.controller.createAbsensi(
-          siswaId: siswaId,
-          status: selectedStatus,
-          keterangan: keteranganController.text,
-          waktuMasuk: waktuMasuk,
-          waktuPulang: waktuPulang,
-          tanggal: selectedTanggal,
-        );
-      } else {
-        // 2. UPDATE: Ini adalah data yang ada, jadi kita UPDATE
-        await widget.controller.updateAbsensi(
-          absensiId: absensiId as int, // Aman untuk cast
-          status: selectedStatus,
-          keterangan: keteranganController.text,
-          waktuMasuk: waktuMasuk,
-          waktuPulang: waktuPulang,
-          tanggal: selectedTanggal,
-        );
-      }
+      await widget.controller.updateAbsensi(
+        absensiId: widget.absensiData['id'],
+        status: selectedStatus,
+        keterangan: keteranganController.text,
+        waktuMasuk: waktuMasuk,
+        waktuPulang: waktuPulang,
+        tanggal: selectedTanggal,
+      );
 
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Data absensi berhasil disimpan'),
+            content: Text('Data absensi berhasil diperbarui'),
             backgroundColor: Colors.green,
           ),
         );
@@ -1012,7 +942,7 @@ class _EditAbsensiSheetState extends State<_EditAbsensiSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gagal menyimpan data: $e'),
+            content: Text('Gagal memperbarui data: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1032,10 +962,9 @@ class _EditAbsensiSheetState extends State<_EditAbsensiSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // 'siswa' dijamin ada oleh logika controller baru
-    final namaSiswa = (widget.absensiData['siswa'] is Map)
-        ? (widget.absensiData['siswa']['nama'] ?? '-')
-        : '-';
+    final namaSiswa =
+        (widget.absensiData['siswa'] is Map) ? (widget.absensiData['siswa']['nama'] ?? '-') : '-';
+    final dateFormatter = DateFormat('EEEE, dd MMMM yyyy', 'id_ID');
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
@@ -1137,10 +1066,7 @@ class _EditAbsensiSheetState extends State<_EditAbsensiSheet> {
                         ),
                         title: const Text('Tanggal'),
                         subtitle: Text(
-                          DateFormat(
-                            'EEEE, dd MMMM yyyy',
-                            'id_ID',
-                          ).format(selectedTanggal),
+                          dateFormatter.format(selectedTanggal),
                         ),
                         trailing: const Icon(Icons.arrow_drop_down),
                         onTap: _pickDate,
