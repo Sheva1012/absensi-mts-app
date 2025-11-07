@@ -724,12 +724,29 @@ class _LineChartCard extends StatelessWidget {
             children: [
               const Icon(Icons.show_chart),
               const SizedBox(width: 10),
-              const Text(
-                'Statistik Kehadiran 7 Hari Terakhir',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              const Expanded(
+                // ← batasi teks
+                child: Text(
+                  'Statistik Kehadiran 7 Hari Terakhir',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
-              ..._buildFilters(['Minggu Ini', 'Bulan Ini', 'Tahun Ini'], 0),
+              const SizedBox(width: 10),
+              Flexible(
+                // ← filter tetap flexible
+                child: Wrap(
+                  // ← ganti Row dengan Wrap
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: _buildFilters([
+                    'Minggu Ini',
+                    'Bulan Ini',
+                    'Tahun Ini',
+                  ], 0),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 24),

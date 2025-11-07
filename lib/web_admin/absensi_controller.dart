@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AbsensiController extends ChangeNotifier {
   final SupabaseClient supabase = Supabase.instance.client;
-  final String schoolName;
+  final String schoolName; // hanya label tampilan, bukan filter query
 
   // --- State ---
   bool _isLoading = true;
@@ -39,7 +39,7 @@ class AbsensiController extends ChangeNotifier {
     await fetchAbsensi();
   }
 
-  // --- Fetch Data ---
+  // --- Ambil daftar kelas ---
   Future<void> fetchDaftarKelas() async {
     debugLog('Mulai fetch daftar kelas...');
     _isKelasLoading = true;
@@ -54,11 +54,8 @@ class AbsensiController extends ChangeNotifier {
       _daftarKelas = List<Map<String, dynamic>>.from(response);
       _daftarKelas.insert(0, {'id': null, 'nama_kelas': 'Semua Kelas'});
       _selectedKelasId = null;
-
-      debugLog('Daftar kelas berhasil dimuat: ${_daftarKelas.length} kelas');
     } catch (e, st) {
-      debugLog('Error saat fetchDaftarKelas: $e');
-      debugLog('Stack: $st');
+      debugLog('Error fetchDaftarKelas: $e\n$st');
       _daftarKelas = [
         {'id': null, 'nama_kelas': 'Semua Kelas'},
       ];
@@ -70,47 +67,76 @@ class AbsensiController extends ChangeNotifier {
 
   Future<void> fetchAbsensi() async {
     isLoading = true;
-    debugLog('Mulai fetch absensi dari Supabase...');
+    debugLog('Mulai fetch absensi...');
 
     try {
-      final String tglFilter = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final int? localKelasId = _selectedKelasId;
+      final tglFilter = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final localKelasId = _selectedKelasId;
 
-      debugLog('Filter tanggal: $tglFilter, Filter kelas: $localKelasId');
+      // ✅ 1️⃣ Ambil semua siswa aktif
+      final siswaResult = localKelasId == null
+          ? await supabase
+                .from('siswa')
+                .select('id, nama, kelas_id, status')
+                .order('nama')
+          : await supabase
+                .from('siswa')
+                .select('id, nama, kelas_id, status')
+                .eq('kelas_id', localKelasId)
+                .order('nama');
 
-      var query = supabase.from('absensi').select('''
-        id,
-        siswa_id,
-        siswa!inner(nama, kelas_id),
-        tanggal,
-        status,
-        waktu_masuk,
-        waktu_pulang,
-        keterangan,
-        updated_by,
-        guru (nama),
-        created_at,
-        updated_at
-      ''').eq('tanggal', tglFilter);
+      final siswaList = List<Map<String, dynamic>>.from(siswaResult);
+      debugLog('Jumlah siswa: ${siswaList.length}');
 
-      if (localKelasId != null) {
-        query = query.eq('siswa.kelas_id', localKelasId);
+      // ✅ 2️⃣ Ambil absensi hari itu
+      final absensiResult = await supabase
+          .from('absensi')
+          .select(
+            'id, siswa_id, tanggal, status, waktu_masuk, waktu_pulang, '
+            'keterangan, updated_by, guru (nama)',
+          )
+          .eq('tanggal', tglFilter);
+
+      final absensiList = List<Map<String, dynamic>>.from(absensiResult);
+      debugLog('Jumlah absensi tanggal $tglFilter: ${absensiList.length}');
+
+      // ✅ 3️⃣ Gabungkan data
+      final merged = <Map<String, dynamic>>[];
+      for (final siswa in siswaList) {
+        final abs = absensiList.firstWhere(
+          (a) => a['siswa_id'] == siswa['id'],
+          orElse: () => {},
+        );
+
+        merged.add(
+          abs.isEmpty
+              ? {
+                  'id': null,
+                  'siswa_id': siswa['id'],
+                  'tanggal': tglFilter,
+                  'status': 'alfa',
+                  'waktu_masuk': null,
+                  'waktu_pulang': null,
+                  'keterangan': 'Belum diabsen.',
+                  'updated_by': null,
+                  'guru': null,
+                  'siswa': siswa,
+                }
+              : {...abs, 'siswa': siswa},
+        );
       }
 
-      final response = await query.order('created_at', ascending: false);
-      _absensiData = List<Map<String, dynamic>>.from(response);
-
-      debugLog('Data absensi berhasil dimuat: ${_absensiData.length} baris');
+      _absensiData = merged;
+      debugLog('Data gabungan: ${merged.length} siswa ditampilkan.');
     } catch (e, st) {
-      debugLog('Error saat fetchAbsensi: $e');
-      debugLog('Stack: $st');
+      debugLog('Error fetchAbsensi: $e\n$st');
       _absensiData = [];
     } finally {
       isLoading = false;
     }
   }
 
-  // --- Event Handlers ---
+  // --- Event: pilih tanggal ---
   Future<void> handleDatePick(BuildContext context) async {
     final newDate = await showDatePicker(
       context: context,
@@ -126,14 +152,54 @@ class AbsensiController extends ChangeNotifier {
     }
   }
 
+  // --- Event: pilih kelas ---
   Future<void> onKelasSelected(int? kelasId) async {
     if (kelasId == _selectedKelasId) return;
-
     _selectedKelasId = kelasId;
     notifyListeners();
     await fetchAbsensi();
   }
 
+  // --- CREATE Absensi ---
+  Future<void> createAbsensi({
+    required int siswaId,
+    required String status,
+    required String keterangan,
+    required TimeOfDay? waktuMasuk,
+    required TimeOfDay? waktuPulang,
+    required DateTime tanggal,
+  }) async {
+    debugLog('Membuat absensi baru untuk siswa $siswaId...');
+    final tgl = DateFormat('yyyy-MM-dd').format(tanggal);
+    final String? wMasuk = waktuMasuk != null
+        ? '${waktuMasuk.hour.toString().padLeft(2, '0')}:${waktuMasuk.minute.toString().padLeft(2, '0')}:00'
+        : null;
+    final String? wPulang = waktuPulang != null
+        ? '${waktuPulang.hour.toString().padLeft(2, '0')}:${waktuPulang.minute.toString().padLeft(2, '0')}:00'
+        : null;
+    final String? guruId = supabase.auth.currentUser?.id;
+
+    final insertData = {
+      'siswa_id': siswaId,
+      'tanggal': tgl,
+      'status': status,
+      'waktu_masuk': wMasuk,
+      'waktu_pulang': wPulang,
+      'keterangan': keterangan,
+      'updated_by': guruId,
+    };
+
+    try {
+      await supabase.from('absensi').insert(insertData);
+      await fetchAbsensi();
+      debugLog('Absensi baru berhasil dibuat.');
+    } catch (e) {
+      debugLog('Error createAbsensi: $e');
+      rethrow;
+    }
+  }
+
+  // --- UPDATE Absensi ---
   Future<void> updateAbsensi({
     required int absensiId,
     required String status,
@@ -142,13 +208,15 @@ class AbsensiController extends ChangeNotifier {
     required TimeOfDay? waktuPulang,
     required DateTime tanggal,
   }) async {
-    final String tgl = tanggal.toIso8601String().split('T').first;
+    debugLog('Update absensi ID $absensiId...');
+    final tgl = DateFormat('yyyy-MM-dd').format(tanggal);
     final String? wMasuk = waktuMasuk != null
         ? '${waktuMasuk.hour.toString().padLeft(2, '0')}:${waktuMasuk.minute.toString().padLeft(2, '0')}:00'
         : null;
     final String? wPulang = waktuPulang != null
         ? '${waktuPulang.hour.toString().padLeft(2, '0')}:${waktuPulang.minute.toString().padLeft(2, '0')}:00'
         : null;
+    final String? guruId = supabase.auth.currentUser?.id;
 
     final updateData = {
       'tanggal': tgl,
@@ -161,24 +229,15 @@ class AbsensiController extends ChangeNotifier {
 
     try {
       await supabase.from('absensi').update(updateData).eq('id', absensiId);
-
-      final String editedDate = DateFormat('yyyy-MM-dd').format(tanggal);
-      final String currentDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
-
-      if (editedDate == currentDate) {
-        await fetchAbsensi();
-      } else {
-        _selectedDate = tanggal;
-        notifyListeners();
-        await fetchAbsensi();
-      }
+      await fetchAbsensi();
+      debugLog('Absensi berhasil diperbarui.');
     } catch (e) {
-      debugLog('Error update absensi: $e');
+      debugLog('Error updateAbsensi: $e');
       rethrow;
     }
   }
 
-  // --- UTILITAS PEMFORMATAN ---
+  // --- Utility Format & Parse ---
   DateTime? parseDateTime(dynamic value) {
     if (value == null) return null;
     try {
@@ -188,8 +247,7 @@ class AbsensiController extends ChangeNotifier {
         return DateFormat('yyyy-MM-dd').parse(value);
       }
       return DateTime.parse(value.toString());
-    } catch (e) {
-      debugLog('parseDateTime error for value=$value -> $e');
+    } catch (_) {
       return null;
     }
   }
@@ -205,8 +263,7 @@ class AbsensiController extends ChangeNotifier {
         );
       }
       return null;
-    } catch (e) {
-      debugLog('parseTimeOfDay error for value=$value -> $e');
+    } catch (_) {
       return null;
     }
   }

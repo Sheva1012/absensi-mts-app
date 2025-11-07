@@ -790,6 +790,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
         ),
       );
     }
+    const double tableMinWidth = 790;
 
     return Container(
       width: double.infinity,
@@ -808,98 +809,159 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1350), // Lebar minimum
+          constraints: const BoxConstraints(minWidth: tableMinWidth),
           child: DataTable(
-            columnSpacing: 24,
-            headingRowHeight: 56,
-            dataRowHeight: 64,
-            headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
+            columnSpacing:
+                0.0, 
+            headingRowHeight: 52,
+            dataRowHeight: 60,
+            headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+
+            // --- Kolom (Columns) ---
             columns: const [
               DataColumn(
-                label: Text(
-                  'No',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 60,
+                  child: Align(
+                    child: Text(
+                      'No',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'NIS',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 70, // Dikecilkan lagi
+                  child: Center(
+                    child: Text(
+                      'NIS',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Nama',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 190, // Dikecilkan
+                  child: Center(
+                    child: Text(
+                      'Nama',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Kelas',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 100, // Dikecilkan
+                  child: Center(
+                    child: Text(
+                      'Kelas',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Nama Ortu',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 160, // Dikecilkan
+                  child: Center(
+                    child: Text(
+                      'Nama Ortu',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'No. Ortu',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 100, // Dikecilkan
+                  child: Center(
+                    child: Text(
+                      'No. Ortu',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Status',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 80,
+                  child: Center(
+                    child: Text(
+                      'Status',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Aksi',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 140,
+                  child: Center(
+                    child: Text(
+                      'Aksi',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
             ],
+
+            // --- Baris (Rows) ---
             rows: List.generate(siswaData.length, (i) {
               final s = siswaData[i];
               return DataRow(
                 cells: [
-                  DataCell(Text('${s['no'] ?? '-'}')),
-                  DataCell(Text('${s['nis'] ?? '-'}')),
-                  DataCell(Text('${s['nama'] ?? '-'}')),
-                  DataCell(Text('${s['kelas']?['nama_kelas'] ?? '-'}')),
-                  DataCell(Text('${s['orang_tua_nama'] ?? '-'}')),
-                  DataCell(Text('${s['orang_tua_nomor'] ?? '-'}')),
-                  DataCell(Text('${s['status'] ?? '-'}')),
-                  // SEL AKSI DENGAN 3 TOMBOL
+                  DataCell(Center(child: Text('${i + 1}'))),
+                  DataCell(Center(child: Text('${s['nis'] ?? '-'}'))),
+                  DataCell(Center(child: Text('${s['nama'] ?? '-'}'))),
                   DataCell(
-                    Row(
-                      children: [
-                        _buildAction(
-                          Icons.qr_code_2,
-                          'QR Code',
-                          Colors.teal,
-                          onPressed: () => _showBarcodeDialog(s),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildAction(
-                          Icons.edit,
-                          'Edit',
-                          Colors.blue,
-                          onPressed: () => _showSiswaForm(siswa: s),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildAction(
-                          Icons.delete,
-                          'Hapus',
-                          Colors.red,
-                          onPressed: () => _deleteSiswa(s['id']),
-                        ),
-                      ],
+                    Center(child: Text('${s['kelas']?['nama_kelas'] ?? '-'}')),
+                  ),
+                  DataCell(
+                    Center(child: Text('${s['orang_tua_nama'] ?? '-'}')),
+                  ),
+                  DataCell(
+                    Center(child: Text('${s['orang_tua_nomor'] ?? '-'}')),
+                  ),
+                  DataCell(Center(child: Text('${s['status'] ?? '-'}'))),
+                  DataCell(
+                    Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildAction(
+                            Icons.qr_code_2,
+                            'QR',
+                            Colors.teal,
+                            onPressed: () => _showBarcodeDialog(s),
+                          ),
+                          const SizedBox(width: 4),
+                          _buildAction(
+                            Icons.edit,
+                            'Edit',
+                            Colors.blue,
+                            onPressed: () => _showSiswaForm(siswa: s),
+                          ),
+                          const SizedBox(width: 4),
+                          _buildAction(
+                            Icons.delete,
+                            'Hapus',
+                            Colors.red,
+                            onPressed: () => _deleteSiswa(s['id']),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -913,24 +975,19 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
 
   Widget _buildAction(
     IconData icon,
-    String label,
+    String tooltip,
     Color color, {
     VoidCallback? onPressed,
   }) {
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color.withOpacity(0.1),
-        foregroundColor: color,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      icon: Icon(icon, size: 16),
-      label: Text(
-        label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
+    return IconButton(
+      icon: Icon(icon, size: 20, color: color),
+      tooltip: tooltip, // muncul saat hover di web
       onPressed: onPressed,
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.all(color.withOpacity(0.1)),
+        shape: WidgetStateProperty.all(const CircleBorder()),
+        overlayColor: WidgetStateProperty.all(color.withOpacity(0.2)),
+      ),
     );
   }
 }
