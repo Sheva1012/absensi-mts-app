@@ -19,11 +19,6 @@ class PageAbsensi extends StatelessWidget {
         builder: (context, controller, _) {
           return Scaffold(
             backgroundColor: const Color(0xFFF5F7FA),
-            appBar: AppBar(
-              title: const Text('Absensi Siswa'),
-              backgroundColor: Colors.blue.shade700,
-              centerTitle: true,
-            ),
             body: SafeArea(
               child: RefreshIndicator(
                 onRefresh: controller.fetchAbsensi,
@@ -152,8 +147,10 @@ class _AbsensiDatePicker extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                DateFormat('EEEE, dd MMM yyyy', 'id_ID')
-                    .format(controller.selectedDate),
+                DateFormat(
+                  'EEEE, dd MMM yyyy',
+                  'id_ID',
+                ).format(controller.selectedDate),
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
@@ -169,16 +166,16 @@ class _AbsensiDatePicker extends StatelessWidget {
   }
 
   BoxDecoration _box() => BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      );
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(12),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.grey.withOpacity(0.08),
+        blurRadius: 10,
+        offset: const Offset(0, 2),
+      ),
+    ],
+  );
 }
 
 // ===========================================================
@@ -195,9 +192,7 @@ class _KelasFilterDropdown extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: _box(),
       child: controller.isKelasLoading
-          ? const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : DropdownButton<int?>(
               value: controller.selectedKelasId,
               isExpanded: true,
@@ -215,16 +210,16 @@ class _KelasFilterDropdown extends StatelessWidget {
   }
 
   BoxDecoration _box() => BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      );
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(12),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.grey.withOpacity(0.08),
+        blurRadius: 10,
+        offset: const Offset(0, 2),
+      ),
+    ],
+  );
 }
 
 // ===========================================================
@@ -306,6 +301,7 @@ class _AbsensiTable extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300, width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.08),
@@ -314,43 +310,110 @@ class _AbsensiTable extends StatelessWidget {
           ),
         ],
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 20,
-          headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
-          columns: const [
-            DataColumn(label: Text('Nama Siswa')),
-            DataColumn(label: Text('Tanggal')),
-            DataColumn(label: Text('Status')),
-            DataColumn(label: Text('Waktu Masuk')),
-            DataColumn(label: Text('Waktu Pulang')),
-            DataColumn(label: Text('Keterangan')),
-          ],
-          rows: controller.absensiData.map((a) {
-            final siswa = a['siswa'] ?? {};
-            final nama = siswa['nama'] ?? '-';
-            final tgl = controller.fmtDate(a['tanggal']);
-            final status = a['status'] ?? '-';
-            final masuk = controller.fmtTime(a['waktu_masuk']);
-            final pulang = controller.fmtTime(a['waktu_pulang']);
-            final ket = a['keterangan'] ?? '-';
-            final color = _statusColor(status);
+      // Perubahan di sini: Menggunakan LayoutBuilder
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double availableWidth = constraints.maxWidth;
 
-            return DataRow(cells: [
-              DataCell(Text(nama)),
-              DataCell(Text(tgl)),
-              DataCell(Text(
-                status.toUpperCase(),
-                style: TextStyle(
-                    fontWeight: FontWeight.bold, color: color),
-              )),
-              DataCell(Text(masuk)),
-              DataCell(Text(pulang)),
-              DataCell(Text(ket, overflow: TextOverflow.ellipsis)),
-            ]);
-          }).toList(),
-        ),
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: availableWidth),
+              child: DataTable(
+                columnSpacing: 16, // lebih kecil biar tidak renggang
+                headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+                columns: const [
+                  DataColumn(
+                    label: SizedBox(
+                      width: 150, // Nama siswa lebih panjang
+                      child: Text('Nama Siswa', textAlign: TextAlign.left),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SizedBox(
+                      width: 100,
+                      child: Center(child: Text('Tanggal')),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SizedBox(
+                      width: 90,
+                      child: Center(child: Text('Status')),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SizedBox(
+                      width: 110,
+                      child: Center(child: Text('Waktu Masuk')),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SizedBox(
+                      width: 110,
+                      child: Center(child: Text('Waktu Pulang')),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SizedBox(
+                      width: 180,
+                      child: Center(child: Text('Keterangan')),
+                    ),
+                  ),
+                ],
+                rows: controller.absensiData.map((a) {
+                  final siswa = a['siswa'] ?? {};
+                  final nama = siswa['nama'] ?? '-';
+                  final tgl = controller.fmtDate(a['tanggal']);
+                  final status = a['status'] ?? '-';
+                  final masuk = controller.fmtTime(a['waktu_masuk']);
+                  final pulang = controller.fmtTime(a['waktu_pulang']);
+                  final ket = a['keterangan'] ?? '-';
+                  final color = _statusColor(status);
+
+                  return DataRow(
+                    cells: [
+                      DataCell(SizedBox(width: 150, child: Text(nama))),
+                      DataCell(
+                        SizedBox(width: 100, child: Center(child: Text(tgl))),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 90,
+                          child: Center(
+                            child: Text(
+                              status.toUpperCase(),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(width: 110, child: Center(child: Text(masuk))),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 110,
+                          child: Center(child: Text(pulang)),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 180,
+                          child: Center(
+                            child: Text(ket, overflow: TextOverflow.ellipsis),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

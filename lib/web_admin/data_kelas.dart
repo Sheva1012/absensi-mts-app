@@ -311,50 +311,83 @@ class _PageKelasState extends State<PageKelas> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          // --- DIUBAH: Perlebar minWidth untuk kolom baru ---
-          constraints: const BoxConstraints(minWidth: 1100),
+          constraints: const BoxConstraints(minWidth: 950),
           child: DataTable(
-            columnSpacing: 24,
-            headingRowHeight: 56,
-            dataRowHeight: 64,
-            headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
+            columnSpacing: 24, // 🔹 Lebih rapat agar jarak kolom seragam
+            headingRowHeight: 52,
+            dataRowHeight: 60,
+            headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
             columns: const [
               DataColumn(
-                label: Text(
-                  'ID',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 50,
+                  child: Center(
+                    child: Text(
+                      'ID',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Nama Kelas',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 160,
+                  child: Center(
+                    child: Text(
+                      'Nama Kelas',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Wali Kelas',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 160,
+                  child: Center(
+                    child: Text(
+                      'Wali Kelas',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Jam Masuk',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 120,
+                  child: Center(
+                    child: Text(
+                      'Jam Masuk',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
-              // --- BARU: Kolom Jam Pulang ---
               DataColumn(
-                label: Text(
-                  'Jam Pulang',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 120,
+                  child: Center(
+                    child: Text(
+                      'Jam Pulang',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
-              // --- AKHIR BARU ---
               DataColumn(
-                label: Text(
-                  'Aksi',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 120,
+                  child: Center(
+                    child: Text(
+                      'Aksi',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -366,29 +399,30 @@ class _PageKelasState extends State<PageKelas> {
               );
               return DataRow(
                 cells: [
-                  DataCell(Text(s['id'].toString())),
-                  DataCell(Text(s['nama_kelas'] ?? '-')),
-                  DataCell(Text(wali['nama'] ?? '-')),
-                  DataCell(Text(s['jam_masuk'] ?? '-')),
-                  // --- BARU: Sel Jam Pulang ---
-                  DataCell(Text(s['jam_pulang'] ?? '-')),
-                  // --- AKHIR BARU ---
+                  DataCell(Center(child: Text(s['id'].toString()))),
+                  DataCell(Center(child: Text(s['nama_kelas'] ?? '-'))),
+                  DataCell(Center(child: Text(wali['nama'] ?? '-'))),
+                  DataCell(Center(child: Text(s['jam_masuk'] ?? '-'))),
+                  DataCell(Center(child: Text(s['jam_pulang'] ?? '-'))),
                   DataCell(
-                    Row(
-                      children: [
-                        _buildAction(Icons.edit, 'Edit', Colors.blue, () {
-                          _showEditDialog(s);
-                        }),
-                        const SizedBox(width: 8),
-                        _buildAction(
-                          Icons.visibility,
-                          'Lihat',
-                          Colors.green,
-                          () {
-                            widget.onViewSiswa(s['id'].toString());
-                          },
-                        ),
-                      ],
+                    Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildAction(Icons.edit, 'Edit', Colors.blue, () {
+                            _showEditDialog(s);
+                          }),
+                          const SizedBox(width: 8),
+                          _buildAction(
+                            Icons.visibility,
+                            'Lihat',
+                            Colors.green,
+                            () {
+                              widget.onViewSiswa(s['id'].toString());
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

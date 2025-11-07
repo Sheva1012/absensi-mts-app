@@ -790,6 +790,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
         ),
       );
     }
+    const double tableMinWidth = 790;
 
     return Container(
       width: double.infinity,
@@ -808,80 +809,136 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1350), // Lebar minimum
+          constraints: const BoxConstraints(minWidth: tableMinWidth),
           child: DataTable(
-            columnSpacing: 8, // kecilkan jarak antar kolom
-            headingRowHeight: 56,
-            dataRowHeight: 64,
-            headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
+            columnSpacing:
+                0.0, 
+            headingRowHeight: 52,
+            dataRowHeight: 60,
+            headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+
+            // --- Kolom (Columns) ---
             columns: const [
               DataColumn(
-                label: Text(
-                  'No',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 60,
+                  child: Align(
+                    child: Text(
+                      'No',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'NIS',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 70, // Dikecilkan lagi
+                  child: Center(
+                    child: Text(
+                      'NIS',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Nama',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 190, // Dikecilkan
+                  child: Center(
+                    child: Text(
+                      'Nama',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Kelas',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 100, // Dikecilkan
+                  child: Center(
+                    child: Text(
+                      'Kelas',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Nama Ortu',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 160, // Dikecilkan
+                  child: Center(
+                    child: Text(
+                      'Nama Ortu',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'No. Ortu',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 100, // Dikecilkan
+                  child: Center(
+                    child: Text(
+                      'No. Ortu',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Status',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 80,
+                  child: Center(
+                    child: Text(
+                      'Status',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
               DataColumn(
-                label: Text(
-                  'Aksi',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                label: SizedBox(
+                  width: 140,
+                  child: Center(
+                    child: Text(
+                      'Aksi',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ),
             ],
+
+            // --- Baris (Rows) ---
             rows: List.generate(siswaData.length, (i) {
               final s = siswaData[i];
               return DataRow(
                 cells: [
-                  DataCell(Text('${i + 1}')),
-                  DataCell(Text('${s['nis'] ?? '-'}')),
-                  DataCell(Text('${s['nama'] ?? '-'}')),
-                  DataCell(Text('${s['kelas']?['nama_kelas'] ?? '-'}')),
-                  DataCell(Text('${s['orang_tua_nama'] ?? '-'}')),
-                  DataCell(Text('${s['orang_tua_nomor'] ?? '-'}')),
-                  DataCell(Text('${s['status'] ?? '-'}')),
+                  DataCell(Center(child: Text('${i + 1}'))),
+                  DataCell(Center(child: Text('${s['nis'] ?? '-'}'))),
+                  DataCell(Center(child: Text('${s['nama'] ?? '-'}'))),
                   DataCell(
-                    Align(
-                      alignment:
-                          Alignment.centerLeft, // biar ikon agak nempel kiri
+                    Center(child: Text('${s['kelas']?['nama_kelas'] ?? '-'}')),
+                  ),
+                  DataCell(
+                    Center(child: Text('${s['orang_tua_nama'] ?? '-'}')),
+                  ),
+                  DataCell(
+                    Center(child: Text('${s['orang_tua_nomor'] ?? '-'}')),
+                  ),
+                  DataCell(Center(child: Text('${s['status'] ?? '-'}'))),
+                  DataCell(
+                    Center(
                       child: Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.start, // bukan spaceEvenly
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           _buildAction(
                             Icons.qr_code_2,

@@ -6,6 +6,7 @@ class AbsensiController extends ChangeNotifier {
   final SupabaseClient supabase = Supabase.instance.client;
   final String schoolName; // hanya label tampilan, bukan filter query
 
+  // --- State ---
   bool _isLoading = true;
   bool _isKelasLoading = true;
   List<Map<String, dynamic>> _absensiData = [];
@@ -30,11 +31,9 @@ class AbsensiController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void debugLog(String message) {
-    debugPrint('[ABSENSI DEBUG] $message');
-  }
+  void debugLog(String message) => debugPrint('[ABSENSI DEBUG] $message');
 
-  // --- Inisialisasi Data ---
+  // --- Inisialisasi ---
   Future<void> _initializeData() async {
     await fetchDaftarKelas();
     await fetchAbsensi();
@@ -226,7 +225,6 @@ class AbsensiController extends ChangeNotifier {
       'waktu_pulang': wPulang,
       'keterangan': keterangan,
       'updated_at': DateTime.now().toIso8601String(),
-      'updated_by': guruId,
     };
 
     try {
