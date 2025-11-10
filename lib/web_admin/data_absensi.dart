@@ -234,7 +234,17 @@ class _AbsensiContent extends StatelessWidget {
     if (controller.absensiData.isEmpty) {
       return _EmptyStateView(controller: controller);
     }
-    return _AbsensiTable(controller: controller);
+
+    // --- DIUBAH: Tambahkan Column dan Tombol Export ---
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end, // Tombol ke kanan
+      children: [
+        _ExportPdfButton(controller: controller),
+        const SizedBox(height: 16),
+        _AbsensiTable(controller: controller),
+      ],
+    );
+    // --- AKHIR PERUBAHAN ---
   }
 }
 
@@ -282,6 +292,38 @@ class _EmptyStateView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ===========================================================
+// BARU: WIDGET TOMBOL EXPORT
+// ===========================================================
+class _ExportPdfButton extends StatelessWidget {
+  final AbsensiController controller;
+  const _ExportPdfButton({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      icon: const Icon(Icons.picture_as_pdf, size: 18),
+      label: const Text('Export PDF'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color.fromARGB(255, 209, 33, 33), // Warna tombol
+        foregroundColor: Colors.white, // Warna teks
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      ),
+      onPressed: () {
+        // Ambil controller dari provider
+        final controller = Provider.of<AbsensiController>(
+          context,
+          listen: false,
+        );
+
+        // Panggil fungsi export PDF
+        controller.exportPdf(context);
+      },
     );
   }
 }
@@ -421,7 +463,10 @@ class _AbsensiTable extends StatelessWidget {
   static Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'hadir':
+      case 'pulang': // Status 'pulang' dianggap sukses
         return Colors.green.shade700;
+      case 'terlambat': // Tambahkan status 'terlambat'
+        return Colors.purple.shade700; // Warna ungu agar beda
       case 'sakit':
       case 'izin':
         return Colors.orange.shade700;

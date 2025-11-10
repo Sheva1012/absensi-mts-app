@@ -242,7 +242,7 @@ class _PageGuruState extends State<PageGuru> {
       alignment: Alignment.centerRight,
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue,
+          backgroundColor: const Color.fromARGB(255, 11, 226, 43),
           foregroundColor: Colors.white,
           elevation: 2,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+// Import untuk PDF
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+
 class AbsensiController extends ChangeNotifier {
   final SupabaseClient supabase = Supabase.instance.client;
-  final String schoolName; // hanya label tampilan, bukan filter query
+  final String schoolName;
 
   // --- State ---
   bool _isLoading = true;
@@ -235,6 +240,192 @@ class AbsensiController extends ChangeNotifier {
       debugLog('Error updateAbsensi: $e');
       rethrow;
     }
+  }
+
+  // =======================================================
+  // === BARU: FUNGSI UNTUK EXPORT PDF ===
+  // =======================================================
+
+  /// Fungsi utama yang dipanggil dari UI untuk memulai export PDF
+  Future<void> exportPdf(BuildContext context) async {
+    debugLog('Mulai export PDF...');
+
+    if (_absensiData.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Tidak ada data untuk diexport'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      return;
+    }
+
+    // Tampilkan dialog loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // 1. Dapatkan Nama Kelas yang dipilih
+      String namaKelas = 'Semua Kelas';
+      if (_selectedKelasId != null) {
+        final kelasMap = _daftarKelas.firstWhere(
+          (k) => k['id'] == _selectedKelasId,
+          orElse: () => {'nama_kelas': 'Semua Kelas'},
+        );
+        namaKelas = kelasMap['nama_kelas'];
+      }
+
+      // 2. Format Tanggal
+      final String tgl = DateFormat(
+        'EEEE, dd MMMM yyyy',
+        'id_ID',
+      ).format(_selectedDate);
+
+      // 3. Buat dokumen PDF
+      final pdf = await _generatePdfDocument(namaKelas, tgl);
+
+      // 4. Tutup dialog loading
+      if (context.mounted) Navigator.of(context).pop();
+
+      // 5. Tampilkan dialog Print/Simpan
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
+      debugLog('Export PDF berhasil.');
+    } catch (e, st) {
+      debugLog('Error exportPdf: $e\n$st');
+      if (context.mounted) Navigator.of(context).pop(); // Tutup dialog loading
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('Gagal membuat PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+    }
+  }
+
+  /// Helper untuk membangun dokumen PDF
+  Future<pw.Document> _generatePdfDocument(String namaKelas, String tgl) async {
+    final doc = pw.Document();
+
+    // Muat font
+    final font = await PdfGoogleFonts.robotoRegular();
+    final boldFont = await PdfGoogleFonts.robotoBold();
+
+    // Siapkan data untuk tabel
+    final headers = [
+      'No',
+      'Nama Siswa',
+      'Status',
+      'Masuk',
+      'Pulang',
+      'Keterangan',
+    ];
+
+    final data = <List<String>>[];
+    for (var i = 0; i < _absensiData.length; i++) {
+      final row = _absensiData[i];
+      final siswa = row['siswa'] ?? {};
+
+      data.add([
+        (i + 1).toString(), // No
+        siswa['nama'] ?? '-', // Nama Siswa
+        (row['status'] ?? '-').toString().toUpperCase(), // Status
+        fmtTime(row['waktu_masuk']), // Masuk
+        fmtTime(row['waktu_pulang']), // Pulang
+        row['keterangan'] ?? '-', // Keterangan
+      ]);
+    }
+
+    // Tambah halaman ke dokumen
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        theme: pw.ThemeData.withFont(base: font, bold: boldFont),
+        build: (pw.Context context) {
+          return [
+            // --- Header Dokumen ---
+            pw.Header(
+              level: 0,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Laporan Absensi',
+                    style: pw.TextStyle(
+                      fontSize: 24,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    schoolName, // Menggunakan nama sekolah dari controller
+                    style: const pw.TextStyle(fontSize: 18),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 20),
+
+            // --- Info Filter ---
+            pw.Text(
+              'Kelas: $namaKelas',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Text(
+              'Tanggal: $tgl',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 20),
+
+            // --- Tabel Data ---
+            pw.Table.fromTextArray(
+              headers: headers,
+              data: data,
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              cellAlignments: {
+                0: pw.Alignment.center,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.center,
+                3: pw.Alignment.center,
+                4: pw.Alignment.center,
+                5: pw.Alignment.centerLeft,
+              },
+              border: pw.TableBorder.all(color: PdfColors.grey),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(0.5), // No
+                1: const pw.FlexColumnWidth(3), // Nama
+                2: const pw.FlexColumnWidth(2), // Status
+                3: const pw.FlexColumnWidth(1), // Masuk
+                4: const pw.FlexColumnWidth(1), // Pulang
+                5: const pw.FlexColumnWidth(2), // Keterangan
+              },
+            ),
+          ];
+        },
+        // --- Footer Dokumen ---
+        footer: (pw.Context context) {
+          return pw.Container(
+            alignment: pw.Alignment.centerRight,
+            margin: const pw.EdgeInsets.only(top: 10.0),
+            child: pw.Text(
+              'Dicetak pada: ${fmtDateTime(DateTime.now())} | Halaman ${context.pageNumber} dari ${context.pagesCount}',
+              style: pw.Theme.of(
+                context,
+              ).defaultTextStyle.copyWith(color: PdfColors.grey, fontSize: 10),
+            ),
+          );
+        },
+      ),
+    );
+
+    return doc;
   }
 
   // --- Utility Format & Parse ---

@@ -28,6 +28,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // State untuk Aktivitas Terbaru
   List<Map<String, dynamic>> _aktivitasTerbaru = [];
 
+  // --- BARU: State untuk Distribusi Kelas ---
+  List<Map<String, dynamic>> _distribusiKelas = [];
+
+  // BARU: Daftar warna untuk pie chart
+  final List<Color> _pieColors = [
+    const Color(0xFF42A5F5), // Biru
+    const Color(0xFF66BB6A), // Hijau
+    const Color(0xFFAB47BC), // Ungu
+    const Color(0xFFFFA726), // Oranye
+    const Color(0xFFEF5350), // Merah
+    const Color(0xFF26C6DA), // Cyan
+    const Color(0xFF7E57C2), // Deep Purple
+    const Color(0xFFD4E157), // Lime
+  ];
+  // --- AKHIR BARU ---
+
   // Data statis (belum dihubungkan ke Supabase)
   final String _rataRataBulanan = '92%'; // Contoh
   final List<Map<String, dynamic>> _alerts = [
@@ -66,31 +82,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // 2. Siapkan listener realtime (SYNTAX V2 YANG BENAR)
     _absensiChannel = supabase.channel('public:absensi');
 
-    // GANTI: Panggil .onPostgresChanges dan masukkan 'callback'
     _absensiChannel
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'absensi',
 
-          // INI YANG HILANG: parameter 'callback' wajib ada
+          // --- INI ADALAH PERBAIKANNYA ---
           callback: (payload) {
-            // 'payload' berisi data yg berubah
             debugPrint(
               'Perubahan terdeteksi di tabel absensi! (payload: $payload)',
             );
 
-            // Panggil ulang fungsi fetch data
             if (mounted) {
               _fetchDashboardData();
             }
           },
+
+          // --- AKHIR PERBAIKAN ---
         )
-        // 3. Panggil .subscribe() di akhir untuk mengaktifkan listener
         .subscribe();
   }
 
   // BARU: Fungsi utama untuk mengambil dan menghitung data
+  // GANTI FUNGSI _fetchDashboardData LAMA ANDA DENGAN INI
+
   Future<void> _fetchDashboardData() async {
     if (!mounted) return;
 
@@ -100,39 +116,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
-      // 1. Dapatkan tanggal hari ini dalam format YYYY-MM-DD
+      // --- PERBAIKAN: Tentukan tanggal hari ini (format YYYY-MM-DD) ---
       final String tglHariIni = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      // --- AKHIR PERBAIKAN ---
 
-      // 2. Hitung total siswa (Count)
-      final totalSiswaRes = await supabase.from('siswa').count();
-      final totalSiswa = totalSiswaRes;
+      // Query 1: Total Siswa
+      final totalSiswa = await supabase.from('siswa').count();
 
-      // 3. Ambil data absensi hari ini
+      // Query 2: Absensi Hari Ini (KEMBALI KE 'eq' KARENA TANGGAL ADALAH 'date')
       final absensiRes = await supabase
           .from('absensi')
           .select()
-          .eq('tanggal', tglHariIni);
+          .eq('tanggal', tglHariIni); // <-- INI PERBAIKANNYA
 
-      // 4. Ambil 5 aktivitas terbaru (join dengan siswa)
+      // Query 3: Aktivitas Terbaru (ini sudah benar)
       final aktivitasRes = await supabase
           .from('absensi')
           .select('*, siswa (nama)') // Join dengan tabel siswa
           .order('created_at', ascending: false)
           .limit(5);
 
-      // 5. Hitung statistik
+      // Query 4: Distribusi Siswa per Kelas (ini sudah benar)
+      final distribusiRes = await supabase
+          .from('kelas')
+          .select('id, nama_kelas, siswa(count)');
+
+      // --- AKHIR PERBAIKAN ---
+
+      // --- Mulai Proses Data ---
+
+      // 1. Proses Total Siswa (sudah jadi int)
+
+      // 2. Proses Absensi Hari Ini
       int hadir = 0;
       int terlambat = 0;
       int absen = 0;
 
       for (var data in absensiRes) {
+        // Gunakan absensiRes
         final status = data['status']?.toString().toLowerCase();
-        if (status == 'hadir') {
+
+        if (status == 'hadir' || status == 'pulang') {
           hadir++;
         } else if (status == 'terlambat') {
           terlambat++;
         } else if (status == 'sakit' || status == 'izin' || status == 'alfa') {
           absen++;
+        }
+      }
+
+      // 3. Proses Aktivitas Terbaru
+
+      // 4. Proses Distribusi Kelas
+      final List<Map<String, dynamic>> distribusiData = [];
+      int colorIndex = 0;
+      for (var item in distribusiRes) {
+        // Gunakan distribusiRes
+        final count = item['siswa'].isNotEmpty
+            ? item['siswa'][0]['count'] as int
+            : 0;
+
+        if (count > 0) {
+          distribusiData.add({
+            'label': item['nama_kelas'],
+            'value': count.toDouble(),
+            'color': _pieColors[colorIndex % _pieColors.length],
+          });
+          colorIndex++;
         }
       }
 
@@ -142,16 +192,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _hadirHariIni = hadir;
         _terlambatHariIni = terlambat;
         _absenHariIni = absen;
-        _aktivitasTerbaru = List<Map<String, dynamic>>.from(aktivitasRes);
+        _aktivitasTerbaru = List<Map<String, dynamic>>.from(
+          aktivitasRes,
+        ); // Gunakan aktivitasRes
+        _distribusiKelas = distribusiData;
         _isLoading = false;
       });
-    } catch (e) {
-      debugPrint('Error fetching dashboard data: $e');
+    } catch (e, st) {
+      debugPrint('--- ERROR FETCHING DASHBOARD ---');
+      debugPrint('ERROR: $e');
+      debugPrint('STACK TRACE: $st');
+      debugPrint('----------------------------------');
+
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gagal memuat data dashboard: $e'),
+            content: Text('Gagal memuat data: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -193,7 +250,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     absenHariIni: _absenHariIni,
                   ),
                   const SizedBox(height: 30),
-                  const _ChartsSection(), // Chart masih statis (dummy)
+                  // MODIFIKASI: Kirim data dinamis ke _ChartsSection
+                  _ChartsSection(distribusiKelas: _distribusiKelas),
                   const SizedBox(height: 30),
                   // MODIFIKASI: Kirim data dinamis ke _BottomSection
                   _BottomSection(
@@ -207,8 +265,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// ... Widget _AppHeader, _SearchBar, _NotificationBadge, _ProfileSection, _WelcomeCard ...
-// (Tidak ada perubahan pada widget-widget ini, biarkan apa adanya)
+// =========================================================================
+// WIDGET-WIDGET BAGIAN UI
+// =========================================================================
+
+// --- HEADER & PROFILE ---
 class _AppHeader extends StatelessWidget {
   const _AppHeader();
 
@@ -332,6 +393,7 @@ class _ProfileSection extends StatelessWidget {
   }
 }
 
+// --- WELCOME CARD ---
 class _WelcomeCard extends StatelessWidget {
   const _WelcomeCard();
 
@@ -397,9 +459,8 @@ class _WelcomeCard extends StatelessWidget {
   }
 }
 
-// MODIFIKASI: Widget ini sekarang menerima data dinamis
+// --- STATS CEPAT (QUICK STATS) ---
 class _QuickStats extends StatelessWidget {
-  // BARU: Tambahkan parameter
   final int totalSiswa;
   final int hadirHariIni;
   final int terlambatHariIni;
@@ -416,13 +477,12 @@ class _QuickStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // BARU: Hitung persentase
+    // Hitung persentase
     final int totalHadir = hadirHariIni + terlambatHariIni;
     final String persenHadir = (totalSiswa > 0)
         ? '${((totalHadir / totalSiswa) * 100).toStringAsFixed(0)}%'
         : '0%';
 
-    // MODIFIKASI: Gunakan data dinamis
     final stats = [
       {
         'value': persenHadir, // <-- Data dinamis
@@ -443,7 +503,7 @@ class _QuickStats extends StatelessWidget {
         'color': const Color(0xFFEF5350),
       },
       {
-        'value': rataRataBulanan, // <-- Masih statis, bisa dikembangkan
+        'value': rataRataBulanan, // <-- Masih statis
         'title': 'Rata-rata Bulanan',
         'icon': Icons.pie_chart_outline,
         'color': const Color(0xFFAB47BC),
@@ -508,9 +568,8 @@ class _QuickStats extends StatelessWidget {
   }
 }
 
-// MODIFIKASI: Widget ini sekarang menerima data dinamis
+// --- STATS DETAIL (DETAILED STATS) ---
 class _DetailedStats extends StatelessWidget {
-  // BARU: Tambahkan parameter
   final int totalSiswa;
   final int hadirHariIni;
   final int terlambatHariIni;
@@ -525,7 +584,6 @@ class _DetailedStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // BARU: Hitung statistik detail
     final int totalHadir = hadirHariIni + terlambatHariIni;
     final double persenHadir = (totalSiswa > 0)
         ? (totalHadir / totalSiswa)
@@ -537,39 +595,36 @@ class _DetailedStats extends StatelessWidget {
         ? (absenHariIni / totalSiswa)
         : 0.0;
 
-    // MODIFIKASI: Gunakan data dinamis
     final stats = [
       {
         'title': 'KEHADIRAN HARIAN',
-        'value': '${(persenHadir * 100).toStringAsFixed(0)}%', // <-- Dinamis
-        'change': '', // (Bisa ditambahkan jika ada perbandingan)
+        'value': '${(persenHadir * 100).toStringAsFixed(0)}%',
+        'change': '',
         'positive': true,
-        'progress': persenHadir, // <-- Dinamis
-        'subtitle': '$totalHadir/$totalSiswa Siswa', // <-- Dinamis
+        'progress': persenHadir,
+        'subtitle': '$totalHadir/$totalSiswa Siswa',
         'detail': 'Hari ini',
         'color': const Color(0xFF66BB6A),
         'icon': Icons.check_circle_outline,
       },
       {
         'title': 'KETERLAMBATAN',
-        'value': terlambatHariIni.toString(), // <-- Dinamis
+        'value': terlambatHariIni.toString(),
         'change': '',
         'positive': false,
-        'progress': persenTerlambat, // <-- Dinamis
-        'subtitle':
-            '${(persenTerlambat * 100).toStringAsFixed(1)}% dari total', // <-- Dinamis
+        'progress': persenTerlambat,
+        'subtitle': '${(persenTerlambat * 100).toStringAsFixed(1)}% dari total',
         'detail': 'Perlu perhatian',
         'color': const Color(0xFFFFA726),
         'icon': Icons.access_time,
       },
       {
         'title': 'KETIDAKHADIRAN',
-        'value': absenHariIni.toString(), // <-- Dinamis
+        'value': absenHariIni.toString(),
         'change': '',
         'positive': true,
-        'progress': persenAbsen, // <-- Dinamis
-        'subtitle':
-            '${(persenAbsen * 100).toStringAsFixed(1)}% dari total', // <-- Dinamis
+        'progress': persenAbsen,
+        'subtitle': '${(persenAbsen * 100).toStringAsFixed(1)}% dari total',
         'detail': 'Perlu konfirmasi',
         'color': const Color(0xFFEF5350),
         'icon': Icons.person_off_outlined,
@@ -591,7 +646,6 @@ class _DetailedStats extends StatelessWidget {
   }
 }
 
-// MODIFIKASI: Widget ini sekarang menerima data statis
 class _DetailStatCard extends StatelessWidget {
   final Map<String, dynamic> data;
   const _DetailStatCard(this.data);
@@ -643,7 +697,6 @@ class _DetailStatCard extends StatelessWidget {
             style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          // Hanya tampilkan jika ada data 'change'
           if (data['change'].isNotEmpty)
             Row(
               children: [
@@ -693,26 +746,154 @@ class _DetailStatCard extends StatelessWidget {
   }
 }
 
-// ... Widget _ChartsSection, _LineChartCard, _PieChartCard, _buildFilters ...
-// (Tidak ada perubahan pada widget-widget ini, biarkan apa adanya)
-// (Data chart masih statis/dummy)
+// --- BAGIAN CHARTS ---
 class _ChartsSection extends StatelessWidget {
-  const _ChartsSection();
+  final List<Map<String, dynamic>> distribusiKelas;
+
+  const _ChartsSection({required this.distribusiKelas});
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: const [
-        Expanded(flex: 2, child: _LineChartCard()),
-        SizedBox(width: 20),
-        Expanded(child: _PieChartCard()),
+      children: [
+        const Expanded(flex: 2, child: _StatistikKehadiranChart()),
+        const SizedBox(width: 20),
+        Expanded(child: _PieChartCard(distribusiData: distribusiKelas)),
       ],
     );
   }
 }
 
-class _LineChartCard extends StatelessWidget {
-  const _LineChartCard();
+// --- LINE CHART (BARU) ---
+class _StatistikKehadiranChart extends StatefulWidget {
+  const _StatistikKehadiranChart();
+
+  @override
+  State<_StatistikKehadiranChart> createState() =>
+      _StatistikKehadiranChartState();
+}
+
+class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
+  final SupabaseClient supabase = Supabase.instance.client;
+
+  int _selectedFilterIndex = 0; // 0: Minggu, 1: Bulan, 2: Tahun
+  final List<String> _filters = [
+    'Hari Ini',
+    'Minggu Ini',
+    'Bulan Ini',
+    'Tahun Ini',
+  ];
+
+  bool _isLoading = true;
+  List<FlSpot> _spots = [];
+  Map<double, String> _bottomTitles = {};
+  double _maxY = 100; // Default
+  double _minX = 0; // Default
+  double _maxX = 6; // Default
+  double _intervalX = 1; // Default
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchChartData(_selectedFilterIndex);
+  }
+
+  Future<void> _fetchChartData(int index) async {
+    setState(() => _isLoading = true);
+
+    try {
+      String rpcName;
+      switch (index) {
+        case 1: // Minggu
+          rpcName = 'get_statistik_mingguan';
+          break;
+        case 2: // Bulan
+          rpcName = 'get_statistik_bulanan';
+          break;
+        case 3: // Tahun
+          rpcName = 'get_statistik_tahunan';
+          break;
+        case 0: // <-- BARU
+        default:
+          rpcName = 'get_statistik_harian'; // Panggil RPC baru
+          break;
+      }
+
+      final List<dynamic> result = await supabase.rpc(rpcName);
+
+      if (result.isEmpty) {
+        throw Exception('Data statistik tidak ditemukan.');
+      }
+
+      List<FlSpot> spots = [];
+      Map<double, String> titles = {};
+      double i = 0;
+      double maxVal = 0;
+
+      for (var item in result) {
+        final label = item['label'].toString();
+        final value = double.tryParse(item['value'].toString()) ?? 0.0;
+
+        spots.add(FlSpot(i, value));
+        titles[i] = label;
+        if (value > maxVal) maxVal = value;
+        i++;
+      }
+
+      setState(() {
+        _spots = spots;
+        _bottomTitles = titles;
+        _minX = 0;
+        _maxX = i - 1;
+        _maxY = (maxVal * 1.2).ceilToDouble();
+        _intervalX = (i > 12) ? (i / 12).floorToDouble() : 1;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching chart data: $e');
+      setState(() {
+        _isLoading = false;
+        _spots = [const FlSpot(0, 0)];
+        _bottomTitles = {0: 'Error'};
+      });
+    }
+  }
+
+  List<Widget> _buildFilters() {
+    return List.generate(
+      _filters.length,
+      (i) => Padding(
+        padding: EdgeInsets.only(left: i > 0 ? 8 : 0),
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _selectedFilterIndex = i;
+            });
+            _fetchChartData(i);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: i == _selectedFilterIndex
+                  ? const Color(0xFF42A5F5)
+                  : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              _filters[i],
+              style: TextStyle(
+                color: i == _selectedFilterIndex
+                    ? Colors.white
+                    : Colors.grey.shade600,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -725,9 +906,8 @@ class _LineChartCard extends StatelessWidget {
               const Icon(Icons.show_chart),
               const SizedBox(width: 10),
               const Expanded(
-                // ← batasi teks
                 child: Text(
-                  'Statistik Kehadiran 7 Hari Terakhir',
+                  'Statistik Kehadiran',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -735,16 +915,10 @@ class _LineChartCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Flexible(
-                // ← filter tetap flexible
                 child: Wrap(
-                  // ← ganti Row dengan Wrap
                   spacing: 8,
                   runSpacing: 4,
-                  children: _buildFilters([
-                    'Minggu Ini',
-                    'Bulan Ini',
-                    'Tahun Ini',
-                  ], 0),
+                  children: _buildFilters(),
                 ),
               ),
             ],
@@ -752,97 +926,88 @@ class _LineChartCard extends StatelessWidget {
           const SizedBox(height: 24),
           SizedBox(
             height: 250,
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: 20,
-                  getDrawingHorizontalLine: (v) =>
-                      FlLine(color: Colors.grey.shade200, strokeWidth: 1),
-                ),
-                titlesData: FlTitlesData(
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: 1,
-                      getTitlesWidget: (v, _) => Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          [
-                            'Sen',
-                            'Sel',
-                            'Rab',
-                            'Kam',
-                            'Jum',
-                            'Sab',
-                            'Min',
-                          ][v.toInt() % 7],
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : LineChart(
+                    LineChartData(
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: _maxY / 5,
+                        getDrawingHorizontalLine: (v) =>
+                            FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+                      ),
+                      titlesData: FlTitlesData(
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: _intervalX,
+                            getTitlesWidget: (value, meta) {
+                              final title = _bottomTitles[value.toDouble()];
+                              if (title == null) return const SizedBox();
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  title,
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      ),
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: 20,
-                      reservedSize: 40,
-                      getTitlesWidget: (v, _) => Text(
-                        '${v.toInt()}%',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: _maxY / 5,
+                            reservedSize: 40,
+                            getTitlesWidget: (v, _) => Text(
+                              '${v.toInt()}%',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        rightTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
                         ),
                       ),
+                      borderData: FlBorderData(show: false),
+                      minX: _minX,
+                      maxX: _maxX,
+                      minY: 0,
+                      maxY: _maxY,
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: _spots,
+                          isCurved: true,
+                          color: const Color(0xFF42A5F5),
+                          barWidth: 3,
+                          dotData: FlDotData(
+                            show: true,
+                            getDotPainter: (_, __, ___, ____) =>
+                                FlDotCirclePainter(
+                                  radius: 4,
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                  strokeColor: const Color(0xFF42A5F5),
+                                ),
+                          ),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: const Color(0xFF42A5F5).withOpacity(0.1),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  rightTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                minX: 0,
-                maxX: 6,
-                minY: 0,
-                maxY: 100,
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: const [
-                      FlSpot(0, 80),
-                      FlSpot(1, 85),
-                      FlSpot(2, 78),
-                      FlSpot(3, 90),
-                      FlSpot(4, 88),
-                      FlSpot(5, 92),
-                      FlSpot(6, 86),
-                    ],
-                    isCurved: true,
-                    color: const Color(0xFF42A5F5),
-                    barWidth: 3,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                        radius: 4,
-                        color: Colors.white,
-                        strokeWidth: 2,
-                        strokeColor: const Color(0xFF42A5F5),
-                      ),
-                    ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: const Color(0xFF42A5F5).withOpacity(0.1),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -850,33 +1015,33 @@ class _LineChartCard extends StatelessWidget {
   }
 }
 
+// --- PIE CHART (BARU) ---
 class _PieChartCard extends StatelessWidget {
-  const _PieChartCard();
+  final List<Map<String, dynamic>> distribusiData;
+
+  const _PieChartCard({required this.distribusiData});
 
   @override
   Widget build(BuildContext context) {
-    final data = [
-      {'label': 'Kelas 7', 'value': 35.0, 'color': const Color(0xFF42A5F5)},
-      {'label': 'Kelas 8', 'value': 40.0, 'color': const Color(0xFF66BB6A)},
-      {'label': 'Kelas 9', 'value': 25.0, 'color': const Color(0xFFAB47BC)},
-    ];
+    final double totalSiswa = distribusiData.fold(
+      0.0,
+      (sum, item) => sum + (item['value'] as double),
+    );
 
     return _WhiteCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: [
-              const Icon(Icons.pie_chart_outline),
-              const SizedBox(width: 10),
-              const Text(
+            children: const [
+              Icon(Icons.pie_chart_outline),
+              SizedBox(width: 10),
+              Text(
                 'Distribusi per Kelas',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(children: _buildFilters(['Hari Ini', 'Minggu Ini'], 0)),
           const SizedBox(height: 24),
           SizedBox(
             height: 200,
@@ -884,26 +1049,25 @@ class _PieChartCard extends StatelessWidget {
               PieChartData(
                 sectionsSpace: 2,
                 centerSpaceRadius: 50,
-                sections: data
-                    .map(
-                      (d) => PieChartSectionData(
-                        value: d['value'] as double,
-                        color: d['color'] as Color,
-                        title: '${(d['value'] as double).toInt()}%',
-                        radius: 60,
-                        titleStyle: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    )
-                    .toList(),
+                sections: distribusiData.map((d) {
+                  final percent = (d['value'] / totalSiswa * 100);
+                  return PieChartSectionData(
+                    value: d['value'] as double,
+                    color: d['color'] as Color,
+                    title: percent > 5 ? '${percent.toStringAsFixed(0)}%' : '',
+                    radius: 60,
+                    titleStyle: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  );
+                }).toList(),
               ),
             ),
           ),
           const SizedBox(height: 20),
-          ...data.map(
+          ...distribusiData.map(
             (d) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
@@ -923,7 +1087,7 @@ class _PieChartCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    '${(d['value'] as double).toInt()}%',
+                    '${(d['value'] as double).toInt()} siswa',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -939,33 +1103,8 @@ class _PieChartCard extends StatelessWidget {
   }
 }
 
-List<Widget> _buildFilters(List<String> labels, int selected) {
-  return List.generate(
-    labels.length,
-    (i) => Padding(
-      padding: EdgeInsets.only(left: i > 0 ? 8 : 0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: i == selected ? const Color(0xFF42A5F5) : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          labels[i],
-          style: TextStyle(
-            color: i == selected ? Colors.white : Colors.grey.shade600,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-// MODIFIKASI: Widget ini sekarang menerima data dinamis
+// --- BAGIAN BAWAH (ALERTS & ACTIVITY) ---
 class _BottomSection extends StatelessWidget {
-  // BARU: Tambahkan parameter
   final List<Map<String, dynamic>> alerts;
   final List<Map<String, dynamic>> activities;
 
@@ -976,27 +1115,20 @@ class _BottomSection extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // MODIFIKASI: Kirim data 'alerts'
         Expanded(flex: 2, child: _AlertsCard(alerts: alerts)),
         const SizedBox(width: 20),
-        // MODIFIKASI: Kirim data 'activities'
         Expanded(child: _ActivityCard(activities: activities)),
       ],
     );
   }
 }
 
-// MODIFIKASI: Widget ini sekarang menerima data dinamis
 class _AlertsCard extends StatelessWidget {
-  // BARU: Tambahkan parameter
   final List<Map<String, dynamic>> alerts;
   const _AlertsCard({required this.alerts});
 
   @override
   Widget build(BuildContext context) {
-    // MODIFIKASI: Hapus data statis
-    // final alerts = [ ... ];
-
     return _WhiteCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1012,7 +1144,6 @@ class _AlertsCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          // MODIFIKASI: Gunakan data dari 'widget.alerts'
           ...alerts.map(
             (a) => Padding(
               padding: const EdgeInsets.only(bottom: 16),
@@ -1025,7 +1156,6 @@ class _AlertsCard extends StatelessWidget {
   }
 }
 
-// Widget ini tidak berubah, karena ia menerima Map
 class _AlertItem extends StatelessWidget {
   final Map<String, dynamic> data;
   const _AlertItem(this.data);
@@ -1075,16 +1205,14 @@ class _AlertItem extends StatelessWidget {
   }
 }
 
-// MODIFIKASI: Widget ini sekarang menerima data dinamis
 class _ActivityCard extends StatelessWidget {
-  // BARU: Tambahkan parameter
   final List<Map<String, dynamic>> activities;
   const _ActivityCard({required this.activities});
 
-  // BARU: Helper untuk menentukan ikon dan warna berdasarkan status
   IconData _getIconForStatus(String? status) {
     switch (status?.toLowerCase()) {
       case 'hadir':
+      case 'pulang': // <-- Tambahkan 'pulang'
         return Icons.check_circle;
       case 'terlambat':
         return Icons.access_time;
@@ -1101,6 +1229,7 @@ class _ActivityCard extends StatelessWidget {
   Color _getColorForStatus(String? status) {
     switch (status?.toLowerCase()) {
       case 'hadir':
+      case 'pulang': // <-- Tambahkan 'pulang'
         return const Color(0xFF66BB6A);
       case 'terlambat':
         return const Color(0xFFFFA726);
@@ -1114,7 +1243,6 @@ class _ActivityCard extends StatelessWidget {
     }
   }
 
-  // BARU: Helper untuk format waktu (time ago) sederhana
   String _formatTimeAgo(String? isoString) {
     if (isoString == null) return '';
     try {
@@ -1150,9 +1278,7 @@ class _ActivityCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          // MODIFIKASI: Gunakan data dinamis 'widget.activities'
           ...activities.map((a) {
-            // BARU: Ekstrak data dari map Supabase
             final status = a['status'] as String?;
             final namaSiswa = (a['siswa'] is Map)
                 ? (a['siswa']['nama'] ?? 'Siswa tidak dikenal')
@@ -1222,7 +1348,7 @@ class _ActivityCard extends StatelessWidget {
   }
 }
 
-// Widget ini tidak berubah
+// --- WIDGET DASAR (BASE CARD) ---
 class _WhiteCard extends StatelessWidget {
   final Widget child;
   const _WhiteCard({required this.child});

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'data_siswa.dart'; // Import ini ada di kode asli Anda
+import 'kelas_logic.dart'; // <- Import file logika yang baru
+// import 'data_siswa.dart'; // Anda mungkin masih memerlukan ini jika onViewSiswa menggunakannya
 
 class PageKelas extends StatefulWidget {
   final String schoolName;
@@ -17,210 +17,85 @@ class PageKelas extends StatefulWidget {
 }
 
 class _PageKelasState extends State<PageKelas> {
-  final SupabaseClient supabase = Supabase.instance.client;
-  bool isLoading = true;
-  List<Map<String, dynamic>> kelasData = [];
-  List<Map<String, dynamic>> guruData = [];
+  late final PageKelasLogic _logic;
 
   @override
   void initState() {
     super.initState();
-    fetchData();
+    _logic = PageKelasLogic();
+    _logic.addListener(_onLogicUpdate);
+    _logic.fetchData();
   }
 
-  Future<void> fetchData() async {
-    setState(() => isLoading = true);
-    try {
-      // select() akan mengambil semua kolom, termasuk 'jam_pulang'
-      final kelasResponse = await supabase
-          .from('kelas')
-          .select()
-          .order('id', ascending: true);
-      // ---------------------------------
-
-      // Ambil data guru
-      final guruResponse = await supabase.from('guru').select('id, nama');
-
-      setState(() {
-        kelasData = List<Map<String, dynamic>>.from(kelasResponse);
-        guruData = List<Map<String, dynamic>>.from(guruResponse);
-        isLoading = false;
-      });
-
-      print('Kelas: ${kelasData.length}, Guru: ${guruData.length}');
-    } catch (e) {
-      print('Error fetching data: $e');
-      setState(() => isLoading = false);
+  void _onLogicUpdate() {
+    if (mounted) {
+      setState(() {});
     }
   }
 
-  // --- DIUBAH: Tambahkan parameter 'jamPulang' ---
-  Future<void> updateKelas(
-    Map<String, dynamic> kelas,
-    String namaKelas,
-    String jamMasuk,
-    String jamPulang, // <-- BARU
-    String? waliGuruId,
-  ) async {
-    try {
-      await supabase
-          .from('kelas')
-          .update({
-            'nama_kelas': namaKelas,
-            'jam_masuk': jamMasuk,
-            'jam_pulang': jamPulang, // <-- BARU
-            'wali_kelas': waliGuruId,
-          })
-          .eq('id', kelas['id']);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data kelas berhasil diperbarui')),
-      );
-      fetchData(); // Muat ulang data untuk menampilkan perubahan
-    } catch (e) {
-      print('Error updating data: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gagal memperbarui data kelas')),
-      );
-    }
+  @override
+  void dispose() {
+    _logic.removeListener(_onLogicUpdate);
+    _logic.dispose();
+    super.dispose();
   }
 
-  void _showEditDialog(Map<String, dynamic> kelas) {
-    final TextEditingController namaController = TextEditingController(
-      text: kelas['nama_kelas'] ?? '',
-    );
-    final TextEditingController jamMasukController = TextEditingController(
-      text: kelas['jam_masuk'] ?? '',
-    );
-    // --- BARU: Controller untuk Jam Pulang ---
-    final TextEditingController jamPulangController = TextEditingController(
-      text: kelas['jam_pulang'] ?? '',
-    );
-    String? selectedGuruId = kelas['wali_kelas'];
+  // --- LOGIKA UI (Event Handling) ---
 
+  void _showAddDialog() {
+    _showUpsertDialog(null); // Panggil dialog dengan data 'kelas' null
+  }
+
+  void _showUpsertDialog(Map<String, dynamic>? kelas) {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Edit Data Kelas'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: namaController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nama Kelas',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: jamMasukController,
-                  readOnly: true,
-                  decoration: InputDecoration(
-                    labelText: 'Jam Masuk',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.access_time),
-                      onPressed: () async {
-                        final time = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.now(),
-                        );
-                        if (time != null) {
-                          // Format H:M menjadi HH:MM
-                          jamMasukController.text =
-                              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-                        }
-                      },
-                    ),
-                  ),
-                ),
+        return _UpsertKelasDialog(
+          kelas: kelas, // Kirim null jika 'Tambah', kirim data jika 'Edit'
+          guruData: _logic.guruData,
+          onSave: (nama, jamMasuk, jamPulang, waliId) async {
+            final String? error;
+            if (kelas == null) {
+              // Mode TAMBAH
+              error = await _logic.createKelas(
+                nama,
+                jamMasuk,
+                jamPulang,
+                waliId,
+              );
+            } else {
+              // Mode EDIT
+              error = await _logic.updateKelas(
+                kelas,
+                nama,
+                jamMasuk,
+                jamPulang,
+                waliId,
+              );
+            }
 
-                // --- BARU: TextField untuk Jam Pulang ---
-                const SizedBox(height: 16),
-                TextField(
-                  controller: jamPulangController,
-                  readOnly: true,
-                  decoration: InputDecoration(
-                    labelText: 'Jam Pulang',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.access_time),
-                      onPressed: () async {
-                        final time = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.now(),
-                        );
-                        if (time != null) {
-                          // Format H:M menjadi HH:MM
-                          jamPulangController.text =
-                              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-                        }
-                      },
-                    ),
-                  ),
-                ),
+            if (!mounted) return; // Pastikan widget masih ada
+            Navigator.pop(context); // Tutup dialog
 
-                // --- AKHIR BARU ---
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedGuruId,
-                  decoration: const InputDecoration(
-                    labelText: 'Pilih Wali Kelas',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: guruData.map((g) {
-                    return DropdownMenuItem<String>(
-                      value: g['id'],
-                      child: Text(g['nama']),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    selectedGuruId = value;
-                  },
+            // Tampilkan Snackbar berdasarkan hasil
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  error ??
+                      (kelas == null
+                          ? 'Kelas berhasil ditambahkan'
+                          : 'Data kelas berhasil diperbarui'),
                 ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final nama = namaController.text.trim();
-                final jamMasuk = jamMasukController.text.trim();
-                // --- BARU: Ambil nilai jam pulang ---
-                final jamPulang = jamPulangController.text.trim();
-
-                // --- DIUBAH: Tambahkan validasi jamPulang ---
-                if (nama.isNotEmpty &&
-                    jamMasuk.isNotEmpty &&
-                    jamPulang.isNotEmpty) {
-                  // --- DIUBAH: Kirim jamPulang ke fungsi update ---
-                  updateKelas(kelas, nama, jamMasuk, jamPulang, selectedGuruId);
-                  Navigator.pop(context);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        // --- DIUBAH: Pesan error ---
-                        'Nama, jam masuk, dan jam pulang tidak boleh kosong',
-                      ),
-                    ),
-                  );
-                }
-              },
-              child: const Text('Simpan'),
-            ),
-          ],
+                backgroundColor: error == null ? Colors.green : Colors.red,
+              ),
+            );
+          },
         );
       },
     );
   }
+
+  // --- BUILD METHOD UTAMA ---
 
   @override
   Widget build(BuildContext context) {
@@ -231,18 +106,67 @@ class _PageKelasState extends State<PageKelas> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
-            const SizedBox(height: 28),
-            isLoading
+            // 1. Header (Tombol 'Tambah' dihapus dari sini)
+            _KelasHeader(schoolName: widget.schoolName),
+            const SizedBox(height: 28), // Spasi setelah header
+            // 2. Tombol 'Tambah Kelas' DITEMPATKAN DI SINI
+            Container(
+              alignment: Alignment.centerRight, // Posisikan tombol di kanan
+              margin: const EdgeInsets.only(bottom: 20), // Beri spasi bawah
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Tambah Kelas'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700], // Samakan dengan header
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                ),
+                onPressed: _showAddDialog, // Panggil fungsi tambah
+              ),
+            ),
+
+            // 3. Konten Tabel
+            _logic.isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _buildTable(),
+                : _KelasDataTable(
+                    kelasData: _logic.kelasData,
+                    guruData: _logic.guruData,
+                    onEdit: (kelas) {
+                      _showUpsertDialog(kelas); // Panggil dialog edit
+                    },
+                    onView: (kelasId) {
+                      widget.onViewSiswa(kelasId);
+                    },
+                  ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildHeader() {
+// =========================================================================
+// WIDGET-WIDGET YANG DIEKSTRAK
+// =========================================================================
+
+// 1. WIDGET HEADER (DIUBAH)
+class _KelasHeader extends StatelessWidget {
+  final String schoolName;
+  // final VoidCallback onAddKelas; // <-- DIHAPUS
+
+  const _KelasHeader({
+    required this.schoolName,
+    // required this.onAddKelas, // <-- DIHAPUS
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -269,12 +193,13 @@ class _PageKelasState extends State<PageKelas> {
               color: Colors.white,
             ),
           ),
+          // DIUBAH: Kembalikan seperti semula (hanya nama sekolah)
           Row(
             children: [
               const Icon(Icons.school, color: Colors.white),
               const SizedBox(width: 8),
               Text(
-                widget.schoolName,
+                schoolName,
                 style: const TextStyle(color: Colors.white, fontSize: 16),
               ),
             ],
@@ -283,8 +208,24 @@ class _PageKelasState extends State<PageKelas> {
       ),
     );
   }
+}
 
-  Widget _buildTable() {
+// 2. WIDGET TABEL DATA (Tidak Berubah)
+class _KelasDataTable extends StatelessWidget {
+  final List<Map<String, dynamic>> kelasData;
+  final List<Map<String, dynamic>> guruData;
+  final ValueChanged<Map<String, dynamic>> onEdit;
+  final ValueChanged<String> onView;
+
+  const _KelasDataTable({
+    required this.kelasData,
+    required this.guruData,
+    required this.onEdit,
+    required this.onView,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     if (kelasData.isEmpty) {
       return const Center(
         child: Padding(
@@ -311,10 +252,10 @@ class _PageKelasState extends State<PageKelas> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 950),
+          constraints: const BoxConstraints(minWidth: 1210),
           child: DataTable(
-            columnSpacing: 24, // 🔹 Lebih rapat agar jarak kolom seragam
-            headingRowHeight: 52,
+            columnSpacing: 24,
+            headingRowHeight: 50,
             dataRowHeight: 60,
             headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
             columns: const [
@@ -380,7 +321,7 @@ class _PageKelasState extends State<PageKelas> {
               ),
               DataColumn(
                 label: SizedBox(
-                  width: 120,
+                  width: 200,
                   child: Center(
                     child: Text(
                       'Aksi',
@@ -393,15 +334,12 @@ class _PageKelasState extends State<PageKelas> {
             ],
             rows: List.generate(kelasData.length, (i) {
               final s = kelasData[i];
-              final wali = guruData.firstWhere(
-                (g) => g['id'] == s['wali_kelas'],
-                orElse: () => {'nama': '-'},
-              );
+              final waliNama = s['wali_nama'] ?? '-';
               return DataRow(
                 cells: [
                   DataCell(Center(child: Text(s['id'].toString()))),
                   DataCell(Center(child: Text(s['nama_kelas'] ?? '-'))),
-                  DataCell(Center(child: Text(wali['nama'] ?? '-'))),
+                  DataCell(Center(child: Text(waliNama))),
                   DataCell(Center(child: Text(s['jam_masuk'] ?? '-'))),
                   DataCell(Center(child: Text(s['jam_pulang'] ?? '-'))),
                   DataCell(
@@ -410,7 +348,7 @@ class _PageKelasState extends State<PageKelas> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           _buildAction(Icons.edit, 'Edit', Colors.blue, () {
-                            _showEditDialog(s);
+                            onEdit(s); // Panggil callback onEdit
                           }),
                           const SizedBox(width: 8),
                           _buildAction(
@@ -418,7 +356,9 @@ class _PageKelasState extends State<PageKelas> {
                             'Lihat',
                             Colors.green,
                             () {
-                              widget.onViewSiswa(s['id'].toString());
+                              onView(
+                                s['id'].toString(),
+                              ); // Panggil callback onView
                             },
                           ),
                         ],
@@ -454,6 +394,184 @@ class _PageKelasState extends State<PageKelas> {
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       ),
       onPressed: onTap,
+    );
+  }
+}
+
+// 3. WIDGET DIALOG (Tidak Berubah)
+class _UpsertKelasDialog extends StatefulWidget {
+  final Map<String, dynamic>?
+  kelas; // BARU: 'kelas' bisa null (untuk mode Tambah)
+  final List<Map<String, dynamic>> guruData;
+  final Future<void> Function(
+    String nama,
+    String jamMasuk,
+    String jamPulang,
+    String? waliId,
+  )
+  onSave;
+
+  const _UpsertKelasDialog({
+    this.kelas,
+    required this.guruData,
+    required this.onSave,
+  });
+
+  @override
+  State<_UpsertKelasDialog> createState() => _UpsertKelasDialogState();
+}
+
+class _UpsertKelasDialogState extends State<_UpsertKelasDialog> {
+  late final TextEditingController namaController;
+  late final TextEditingController jamMasukController;
+  late final TextEditingController jamPulangController;
+  String? selectedGuruId;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    namaController = TextEditingController(
+      text: widget.kelas?['nama_kelas'] ?? '',
+    );
+    jamMasukController = TextEditingController(
+      text: widget.kelas?['jam_masuk'] ?? '07:00',
+    );
+    jamPulangController = TextEditingController(
+      text: widget.kelas?['jam_pulang'] ?? '14:00',
+    );
+    selectedGuruId = widget.kelas?['wali_kelas'];
+  }
+
+  @override
+  void dispose() {
+    namaController.dispose();
+    jamMasukController.dispose();
+    jamPulangController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSave() async {
+    final nama = namaController.text.trim();
+    final jamMasuk = jamMasukController.text.trim();
+    final jamPulang = jamPulangController.text.trim();
+
+    if (nama.isEmpty || jamMasuk.isEmpty || jamPulang.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nama, jam masuk, dan jam pulang tidak boleh kosong'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    await widget.onSave(nama, jamMasuk, jamPulang, selectedGuruId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        widget.kelas == null ? 'Tambah Kelas Baru' : 'Edit Data Kelas',
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: namaController,
+              decoration: const InputDecoration(
+                labelText: 'Nama Kelas',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: jamMasukController,
+              readOnly: true,
+              decoration: InputDecoration(
+                labelText: 'Jam Masuk',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.access_time),
+                  onPressed: () async {
+                    final time = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                    );
+                    if (time != null) {
+                      jamMasukController.text =
+                          '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: jamPulangController,
+              readOnly: true,
+              decoration: InputDecoration(
+                labelText: 'Jam Pulang',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.access_time),
+                  onPressed: () async {
+                    final time = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                    );
+                    if (time != null) {
+                      jamPulangController.text =
+                          '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: selectedGuruId,
+              decoration: const InputDecoration(
+                labelText: 'Pilih Wali Kelas',
+                border: OutlineInputBorder(),
+              ),
+              items: widget.guruData.map((g) {
+                return DropdownMenuItem<String>(
+                  value: g['id'],
+                  child: Text(g['nama']),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  selectedGuruId = value;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _handleSave,
+          child: _isSaving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Simpan'),
+        ),
+      ],
     );
   }
 }
