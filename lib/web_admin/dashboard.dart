@@ -813,48 +813,63 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
         case 3: // Tahun
           rpcName = 'get_statistik_tahunan';
           break;
-        case 0: // <-- BARU
+        case 0:
         default:
-          rpcName = 'get_statistik_harian'; // Panggil RPC baru
+          rpcName = 'get_statistik_harian';
           break;
       }
 
       final List<dynamic> result = await supabase.rpc(rpcName);
 
-      if (result.isEmpty) {
-        throw Exception('Data statistik tidak ditemukan.');
-      }
+      // --- PERBAIKAN LOGIKA ADA DI SINI ---
 
       List<FlSpot> spots = [];
       Map<double, String> titles = {};
       double i = 0;
       double maxVal = 0;
 
-      for (var item in result) {
-        final label = item['label'].toString();
-        final value = double.tryParse(item['value'].toString()) ?? 0.0;
+      // Cek jika hasilnya KOSONG (misal, tidak ada data sama sekali)
+      if (result.isEmpty) {
+        // Jangan error. Buat data default yang "kosong" tapi valid.
+        spots.add(const FlSpot(0, 0)); // Satu titik di (0,0)
+        titles[0] = 'N/A'; // Label default
+        maxVal = 100; // Default max Y
+        i = 1; // Set 'i' ke 1 agar maxX tidak negatif
+      } else {
+        // Jika ada data, proses seperti biasa
+        for (var item in result) {
+          final label = item['label'].toString();
+          final value = double.tryParse(item['value'].toString()) ?? 0.0;
 
-        spots.add(FlSpot(i, value));
-        titles[i] = label;
-        if (value > maxVal) maxVal = value;
-        i++;
+          spots.add(FlSpot(i, value));
+          titles[i] = label;
+          if (value > maxVal) maxVal = value;
+          i++;
+        }
       }
 
       setState(() {
         _spots = spots;
         _bottomTitles = titles;
         _minX = 0;
-        _maxX = i - 1;
-        _maxY = (maxVal * 1.2).ceilToDouble();
+        _maxX = i - 1; // Sekarang ini minimal akan menjadi 0 (dari 1-1)
+
+        // Atur maxY. Jika maxVal 0 (data kosong), set default ke 100.
+        _maxY = (maxVal == 0) ? 100 : (maxVal * 1.2).ceilToDouble();
+
         _intervalX = (i > 12) ? (i / 12).floorToDouble() : 1;
         _isLoading = false;
       });
     } catch (e) {
       debugPrint('Error fetching chart data: $e');
+      // Perbarui juga blok catch agar aman
       setState(() {
         _isLoading = false;
         _spots = [const FlSpot(0, 0)];
         _bottomTitles = {0: 'Error'};
+        _minX = 0;
+        _maxX = 0; // Pastikan maxX valid saat error
+        _maxY = 100;
       });
     }
   }
