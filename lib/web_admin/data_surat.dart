@@ -448,7 +448,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
     }
 
     return Container(
-      width: double.infinity,
+      // Hapus width: double.infinity di sini karena akan ditangani oleh LayoutBuilder/parent
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -461,85 +461,97 @@ class _DataSuratPageState extends State<DataSuratPage> {
           ),
         ],
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1000),
-          child: DataTable(
-            columnSpacing: 24,
-            headingRowHeight: 56,
-            dataRowHeight: 64,
-            headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
-            columns: const [
-              DataColumn(
-                label: Text(
-                  'ID Surat',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              DataColumn(
-                label: Text(
-                  'ID Siswa',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              DataColumn(
-                label: Text(
-                  'Nama Siswa',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              DataColumn(
-                label: Text(
-                  'Tanggal',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              DataColumn(
-                label: Text(
-                  'Jenis Surat',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              DataColumn(
-                label: Text(
-                  'Aksi',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-            rows: List.generate(suratData.length, (i) {
-              final s = suratData[i];
-              final tanggal = s['tanggal'] != null
-                  ? DateFormat(
-                      'dd MMM yyyy',
-                    ).format(DateTime.parse(s['tanggal']))
-                  : '-';
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Gunakan lebar maksimum yang tersedia sebagai lebar minimum untuk DataTable
+          final double minTableWidth = constraints.maxWidth;
 
-              return DataRow(
-                cells: [
-                  DataCell(Text('${s['id'] ?? '-'}')),
-                  DataCell(Text('${s['siswa_id'] ?? '-'}')),
-                  DataCell(Text('${s['siswa']?['nama'] ?? '-'}')),
-                  DataCell(Text(tanggal)),
-                  DataCell(Text('${s['jenis'] ?? '-'}')),
-                  DataCell(
-                    Row(
-                      children: [
-                        _buildAction(
-                          Icons.visibility,
-                          'Lihat',
-                          Colors.green,
-                          () => _showDetailDialog(s),
-                        ),
-                      ],
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              // Menggunakan minWidth: minTableWidth akan membuat tabel mengisi lebar penuh,
+              // tetapi jika total lebar kolom melebihi minTableWidth, ia akan melebar dan
+              // SingleChildScrollView akan mengaktifkan scrolling.
+              constraints: BoxConstraints(minWidth: minTableWidth),
+              child: DataTable(
+                columnSpacing: 24,
+                headingRowHeight: 56,
+                dataRowHeight: 64,
+                headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+                columns: const [
+                  DataColumn(
+                    label: Text(
+                      'ID Surat',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'ID Siswa',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Nama Siswa',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Tanggal',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Jenis Surat',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Aksi',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
-              );
-            }),
-          ),
-        ),
+                rows: List.generate(suratData.length, (i) {
+                  final s = suratData[i];
+                  // Pastikan Anda telah mengimpor package intl
+                  // import 'package:intl/intl.dart';
+                  final tanggal = s['tanggal'] != null
+                      ? DateFormat(
+                          'dd MMM yyyy',
+                        ).format(DateTime.parse(s['tanggal']))
+                      : '-';
+
+                  return DataRow(
+                    cells: [
+                      DataCell(Text('${s['id'] ?? '-'}')),
+                      DataCell(Text('${s['siswa_id'] ?? '-'}')),
+                      DataCell(Text('${s['siswa']?['nama'] ?? '-'}')),
+                      DataCell(Text(tanggal)),
+                      DataCell(Text('${s['jenis'] ?? '-'}')),
+                      DataCell(
+                        Row(
+                          children: [
+                            _buildAction(
+                              Icons.visibility,
+                              'Lihat',
+                              Colors.green,
+                              () => _showDetailDialog(s),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

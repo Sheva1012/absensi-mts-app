@@ -235,6 +235,8 @@ class _KelasDataTable extends StatelessWidget {
       );
     }
 
+    final ScrollController _horizontalController = ScrollController();
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -249,127 +251,143 @@ class _KelasDataTable extends StatelessWidget {
           ),
         ],
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1210),
-          child: DataTable(
-            columnSpacing: 24,
-            headingRowHeight: 50,
-            dataRowHeight: 60,
-            headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
-            columns: const [
-              DataColumn(
-                label: SizedBox(
-                  width: 50,
-                  child: Center(
-                    child: Text(
-                      'ID',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.bold),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Scrollbar(
+            controller: _horizontalController,
+            thumbVisibility: true,
+            trackVisibility: true,
+            scrollbarOrientation: ScrollbarOrientation.bottom,
+            child: SingleChildScrollView(
+              controller: _horizontalController,
+              scrollDirection: Axis.horizontal,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16), // jarak scrollbar
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 1210),
+                  child: DataTable(
+                    columnSpacing: 24,
+                    headingRowHeight: 50,
+                    dataRowHeight: 60,
+                    headingRowColor: MaterialStateProperty.all(
+                      Colors.blue.shade50,
                     ),
-                  ),
-                ),
-              ),
-              DataColumn(
-                label: SizedBox(
-                  width: 160,
-                  child: Center(
-                    child: Text(
-                      'Nama Kelas',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ),
-              DataColumn(
-                label: SizedBox(
-                  width: 160,
-                  child: Center(
-                    child: Text(
-                      'Wali Kelas',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ),
-              DataColumn(
-                label: SizedBox(
-                  width: 120,
-                  child: Center(
-                    child: Text(
-                      'Jam Masuk',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ),
-              DataColumn(
-                label: SizedBox(
-                  width: 120,
-                  child: Center(
-                    child: Text(
-                      'Jam Pulang',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ),
-              DataColumn(
-                label: SizedBox(
-                  width: 200,
-                  child: Center(
-                    child: Text(
-                      'Aksi',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-            rows: List.generate(kelasData.length, (i) {
-              final s = kelasData[i];
-              final waliNama = s['wali_nama'] ?? '-';
-              return DataRow(
-                cells: [
-                  DataCell(Center(child: Text(s['id'].toString()))),
-                  DataCell(Center(child: Text(s['nama_kelas'] ?? '-'))),
-                  DataCell(Center(child: Text(waliNama))),
-                  DataCell(Center(child: Text(s['jam_masuk'] ?? '-'))),
-                  DataCell(Center(child: Text(s['jam_pulang'] ?? '-'))),
-                  DataCell(
-                    Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildAction(Icons.edit, 'Edit', Colors.blue, () {
-                            onEdit(s); // Panggil callback onEdit
-                          }),
-                          const SizedBox(width: 8),
-                          _buildAction(
-                            Icons.visibility,
-                            'Lihat',
-                            Colors.green,
-                            () {
-                              onView(
-                                s['id'].toString(),
-                              ); // Panggil callback onView
-                            },
+                    columns: const [
+                      DataColumn(
+                        label: SizedBox(
+                          width: 50,
+                          child: Center(
+                            child: Text(
+                              'ID',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: SizedBox(
+                          width: 160,
+                          child: Center(
+                            child: Text(
+                              'Nama Kelas',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: SizedBox(
+                          width: 160,
+                          child: Center(
+                            child: Text(
+                              'Wali Kelas',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: SizedBox(
+                          width: 120,
+                          child: Center(
+                            child: Text(
+                              'Jam Masuk',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: SizedBox(
+                          width: 120,
+                          child: Center(
+                            child: Text(
+                              'Jam Pulang',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: SizedBox(
+                          width: 200,
+                          child: Center(
+                            child: Text(
+                              'Aksi',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    rows: List.generate(kelasData.length, (i) {
+                      final s = kelasData[i];
+                      final waliNama = s['wali_nama'] ?? '-';
+                      return DataRow(
+                        cells: [
+                          DataCell(Center(child: Text(s['id'].toString()))),
+                          DataCell(Center(child: Text(s['nama_kelas'] ?? '-'))),
+                          DataCell(Center(child: Text(waliNama))),
+                          DataCell(Center(child: Text(s['jam_masuk'] ?? '-'))),
+                          DataCell(Center(child: Text(s['jam_pulang'] ?? '-'))),
+                          DataCell(
+                            Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildAction(
+                                    Icons.edit,
+                                    'Edit',
+                                    Colors.blue,
+                                    () => onEdit(s),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _buildAction(
+                                    Icons.visibility,
+                                    'Lihat',
+                                    Colors.green,
+                                    () => onView(s['id'].toString()),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
-                      ),
-                    ),
+                      );
+                    }),
                   ),
-                ],
-              );
-            }),
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
