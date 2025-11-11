@@ -246,7 +246,7 @@ class AbsensiController extends ChangeNotifier {
   // === BARU: FUNGSI UNTUK EXPORT PDF ===
   // =======================================================
 
-  /// Fungsi utama yang dipanggil dari UI untuk memulai export PDF
+  /// Fungsi utama yang dipanggil dari UI untuk memulai export PDF (langsung download)
   Future<void> exportPdf(BuildContext context) async {
     debugLog('Mulai export PDF...');
 
@@ -281,25 +281,27 @@ class AbsensiController extends ChangeNotifier {
       }
 
       // 2. Format Tanggal
-      final String tgl = DateFormat(
-        'EEEE, dd MMMM yyyy',
-        'id_ID',
-      ).format(_selectedDate);
+      final String tgl = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
       // 3. Buat dokumen PDF
       final pdf = await _generatePdfDocument(namaKelas, tgl);
 
-      // 4. Tutup dialog loading
+      // 4. Simpan file sementara
+      final bytes = await pdf.save();
+
+      // Tutup dialog loading
       if (context.mounted) Navigator.of(context).pop();
 
-      // 5. Tampilkan dialog Print/Simpan
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save(),
-      );
-      debugLog('Export PDF berhasil.');
+      // 5. Gunakan Printing.sharePdf agar langsung bisa diunduh / dibuka
+      final fileName =
+          'Laporan_Absensi_${namaKelas.replaceAll(' ', '_')}_$tgl.pdf';
+
+      await Printing.sharePdf(bytes: bytes, filename: fileName);
+
+      debugLog('Export PDF berhasil dan diunduh.');
     } catch (e, st) {
       debugLog('Error exportPdf: $e\n$st');
-      if (context.mounted) Navigator.of(context).pop(); // Tutup dialog loading
+      if (context.mounted) Navigator.of(context).pop();
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
