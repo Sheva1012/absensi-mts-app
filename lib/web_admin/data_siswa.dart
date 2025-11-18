@@ -679,7 +679,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       );
     }
 
-    const double colSpacing = 17.0;
+    const double colSpacing = 20.0;
     final ScrollController horizontalController = ScrollController();
 
     // Gunakan Column agar Tabel dan Pagination tersusun vertikal
@@ -724,66 +724,91 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                         ),
                         columns: const [
                           DataColumn(
-                            label: Center(
-                              child: Text(
-                                'No',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                            label: SizedBox(
+                              width: 80, // Atur lebar kolom No
+                              child: Center(
+                                child: Text(
+                                  'No',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
                           DataColumn(
-                            label: Center(
-                              child: Text(
-                                'NIS',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                            label: SizedBox(
+                              width: 80, // Atur lebar kolom NIS
+                              child: Center(
+                                child: Text(
+                                  'NIS',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
                           DataColumn(
-                            label: Center(
-                              child: Text(
-                                'Nama',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                            label: SizedBox(
+                              width:
+                                  210, // Nama biasanya butuh lebar lebih besar
+                              child: Center(
+                                child: Text(
+                                  'Nama',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
                           DataColumn(
-                            label: Center(
-                              child: Text(
-                                'Kelas',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                            label: SizedBox(
+                              width: 120, // Lebar kolom Kelas
+                              child: Center(
+                                child: Text(
+                                  'Kelas',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
                           DataColumn(
-                            label: Center(
-                              child: Text(
-                                'Nama Ortu',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                            label: SizedBox(
+                              width: 140, // Lebar Nama Ortu
+                              child: Center(
+                                child: Text(
+                                  'Nama Ortu',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
                           DataColumn(
-                            label: Center(
-                              child: Text(
-                                'No. Ortu',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                            label: SizedBox(
+                              width: 110, // Lebar No Ortu
+                              child: Center(
+                                child: Text(
+                                  'No. Ortu',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
                           DataColumn(
-                            label: Center(
-                              child: Text(
-                                'Status',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                            label: SizedBox(
+                              width: 100, // Lebar Status
+                              child: Center(
+                                child: Text(
+                                  'Status',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
                           DataColumn(
-                            label: Center(
-                              child: Text(
-                                'Aksi',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                            label: SizedBox(
+                              width: 120, // Lebar Aksi (karena ada 3 icon)
+                              child: Center(
+                                child: Text(
+                                  'Aksi',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
