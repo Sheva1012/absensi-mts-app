@@ -261,6 +261,7 @@ class _PageGuruState extends State<PageGuru> {
   }
 
   Widget _buildTable() {
+    // Cek jika data kosong
     if (guruData.isEmpty) {
       return const Center(
         child: Padding(
@@ -270,10 +271,11 @@ class _PageGuruState extends State<PageGuru> {
       );
     }
 
+    // Controller untuk scroll horizontal
     final ScrollController _horizontalController = ScrollController();
 
     return Container(
-      width: double.infinity,
+      // Hapus width: double.infinity agar menyesuaikan parent (LayoutBuilder)
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -286,188 +288,185 @@ class _PageGuruState extends State<PageGuru> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Scrollbar dibungkus Column agar bisa beri jarak nyaman
-          Padding(
-            padding: const EdgeInsets.only(
-              bottom: 16,
-            ), // JARAK antara tabel & scrollbar
-            child: Scrollbar(
+      // Gunakan LayoutBuilder agar responsif terhadap perubahan lebar (sidebar)
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Lebar minimum tabel mengikuti lebar container yang tersedia
+          final double minTableWidth = constraints.maxWidth;
+
+          return Scrollbar(
+            controller: _horizontalController,
+            thumbVisibility: true,
+            trackVisibility: true,
+            scrollbarOrientation: ScrollbarOrientation.bottom,
+            child: SingleChildScrollView(
               controller: _horizontalController,
-              thumbVisibility: true,
-              trackVisibility: true,
-              scrollbarOrientation: ScrollbarOrientation.bottom,
-              child: SingleChildScrollView(
-                controller: _horizontalController,
-                scrollDirection: Axis.horizontal,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 1000),
-                    child: DataTable(
-                      columnSpacing: 24,
-                      headingRowHeight: 56,
-                      dataRowHeight: 64,
-                      headingRowColor: MaterialStateProperty.all(
-                        Colors.blue.shade50,
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                // KUNCI: minWidth diset ke constraints.maxWidth
+                // Ini membuat tabel "full width" jika konten sedikit,
+                // tapi tetap bisa di-scroll jika konten melebar.
+                constraints: BoxConstraints(minWidth: minTableWidth),
+                child: DataTable(
+                  columnSpacing: 24,
+                  headingRowHeight: 56,
+                  dataRowHeight: 64,
+                  headingRowColor: MaterialStateProperty.all(
+                    Colors.blue.shade50,
+                  ),
+                  columns: const [
+                    DataColumn(
+                      label: Text(
+                        'Nama',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      columns: const [
-                        DataColumn(
-                          label: Text(
-                            'Nama',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Email',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: SizedBox(
+                        width: 80,
+                        child: Text(
+                          'Role',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
                         ),
-                        DataColumn(
-                          label: Text(
-                            'Email',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Kelas Diampu',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: SizedBox(
+                        width: 80,
+                        child: Text(
+                          'Avatar',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
                         ),
-                        DataColumn(
-                          label: SizedBox(
+                      ),
+                    ),
+                    DataColumn(
+                      label: SizedBox(
+                        width: 180,
+                        child: Text(
+                          'Aksi',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ],
+                  rows: List.generate(guruData.length, (i) {
+                    final guru = guruData[i];
+
+                    // Logika memproses kelas diampu
+                    final dynamic data = guru['kelas_diampu'];
+                    List<String> semuaKelas = [];
+                    if (data is Map<String, dynamic>) {
+                      data.forEach((key, value) {
+                        if (value is List) {
+                          semuaKelas.addAll(value.cast<String>());
+                        }
+                      });
+                    }
+                    final kelasDiampuText = semuaKelas.isNotEmpty
+                        ? semuaKelas.join(', ')
+                        : '-';
+
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(guru['nama'] ?? '-')),
+                        DataCell(Text(guru['email'] ?? '-')),
+                        DataCell(
+                          SizedBox(
                             width: 80,
-                            child: Text(
-                              'Role',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                              textAlign: TextAlign.center,
+                            child: Center(child: Text(guru['role'] ?? '-')),
+                          ),
+                        ),
+                        DataCell(Text(kelasDiampuText)),
+                        DataCell(
+                          SizedBox(
+                            width: 80,
+                            child: Center(
+                              child:
+                                  (guru['avatar_url'] != null &&
+                                      guru['avatar_url'].isNotEmpty)
+                                  ? CircleAvatar(
+                                      backgroundImage: NetworkImage(
+                                        guru['avatar_url'],
+                                      ),
+                                    )
+                                  : const CircleAvatar(
+                                      child: Icon(Icons.person),
+                                    ),
                             ),
                           ),
                         ),
-                        DataColumn(
-                          label: Text(
-                            'Kelas Diampu',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        DataColumn(
-                          label: SizedBox(
-                            width: 80,
-                            child: Text(
-                              'Avatar',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: SizedBox(
+                        DataCell(
+                          SizedBox(
                             width: 180,
-                            child: Text(
-                              'Aksi',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                              textAlign: TextAlign.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _buildActionButton(
+                                  Icons.edit,
+                                  'Edit',
+                                  Colors.blue,
+                                  onPressed: () => _showFormDialog(guru: guru),
+                                ),
+                                const SizedBox(width: 8),
+                                _buildActionButton(
+                                  Icons.delete,
+                                  'Hapus',
+                                  Colors.red,
+                                  onPressed: () => _showDeleteDialog(guru),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ],
-                      rows: List.generate(guruData.length, (i) {
-                        final guru = guruData[i];
-
-                        final dynamic data = guru['kelas_diampu'];
-                        List<String> semuaKelas = [];
-                        if (data is Map<String, dynamic>) {
-                          data.forEach((key, value) {
-                            if (value is List) {
-                              semuaKelas.addAll(value.cast<String>());
-                            }
-                          });
-                        }
-                        final kelasDiampuText = semuaKelas.isNotEmpty
-                            ? semuaKelas.join(', ')
-                            : '-';
-
-                        return DataRow(
-                          cells: [
-                            DataCell(Text(guru['nama'] ?? '-')),
-                            DataCell(Text(guru['email'] ?? '-')),
-                            DataCell(
-                              SizedBox(
-                                width: 80,
-                                child: Center(child: Text(guru['role'] ?? '-')),
-                              ),
-                            ),
-                            DataCell(Text(kelasDiampuText)),
-                            DataCell(
-                              SizedBox(
-                                width: 80,
-                                child: Center(
-                                  child:
-                                      (guru['avatar_url'] != null &&
-                                          guru['avatar_url'].isNotEmpty)
-                                      ? CircleAvatar(
-                                          backgroundImage: NetworkImage(
-                                            guru['avatar_url'],
-                                          ),
-                                        )
-                                      : const CircleAvatar(
-                                          child: Icon(Icons.person),
-                                        ),
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              SizedBox(
-                                width: 180,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    _buildActionButton(
-                                      Icons.edit,
-                                      'Edit',
-                                      Colors.blue,
-                                      onPressed: () =>
-                                          _showFormDialog(guru: guru),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _buildActionButton(
-                                      Icons.delete,
-                                      'Hapus',
-                                      Colors.red,
-                                      onPressed: () => _showDeleteDialog(guru),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }),
-                    ),
-                  ),
-                )
+                    );
+                  }),
+                ),
               ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
+}
 
-  Widget _buildActionButton(
-    IconData icon,
-    String label,
-    Color color, {
-    VoidCallback? onPressed,
-  }) {
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color.withOpacity(0.1),
-        foregroundColor: color,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      icon: Icon(icon, size: 16),
-      label: Text(
-        label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-      onPressed: onPressed,
-    );
-  }
+Widget _buildActionButton(
+  IconData icon,
+  String label,
+  Color color, {
+  VoidCallback? onPressed,
+}) {
+  return ElevatedButton.icon(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: color.withOpacity(0.1),
+      foregroundColor: color,
+      elevation: 0,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ),
+    icon: Icon(icon, size: 16),
+    label: Text(
+      label,
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+    ),
+    onPressed: onPressed,
+  );
 }
 
 class FormGuru extends StatefulWidget {

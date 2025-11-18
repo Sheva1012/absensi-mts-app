@@ -228,6 +228,85 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
         );
       },
     );
+    // --- WIDGET PAGINATION BARU ---
+    Widget _buildPagination() {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end, // Posisi di kanan
+        children: [
+          // 1. Info Data (Contoh: "1 - 10 dari 50")
+          Text(
+            _logic.paginationInfo,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 16),
+
+          // 2. Tombol Previous
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.chevron_left),
+              tooltip: "Halaman Sebelumnya",
+              // Disable jika di halaman 1
+              onPressed: _logic.currentPage > 1
+                  ? () => _logic.previousPage(searchController.text)
+                  : null,
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // 3. Indikator Angka Halaman
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.blue, // Warna kotak nomor halaman
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.3),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              "${_logic.currentPage}",
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // 4. Tombol Next
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.chevron_right),
+              tooltip: "Halaman Selanjutnya",
+              // Disable jika sudah di halaman terakhir
+              onPressed: _logic.currentPage < _logic.totalPages
+                  ? () => _logic.nextPage(searchController.text)
+                  : null,
+            ),
+          ),
+        ],
+      );
+    }
   }
 
   void _showBarcodeDialog(Map<String, dynamic> siswa) {
@@ -457,36 +536,70 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
             ],
           ),
           const SizedBox(height: 16),
-          _logic
-                  .isKelasLoading // Cek status dari LOGIC
+          _logic.isKelasLoading
               ? const Center(
                   child: Padding(
                     padding: EdgeInsets.all(8.0),
-                    child: Text("Memuat filter kelas..."),
+                    child: Text("Memuat filter..."),
                   ),
                 )
               : Row(
                   children: [
-                    Expanded(
+                    // --- [BARU] DROPDOWN JUMLAH DATA ---
+                    SizedBox(
+                      width: 90,
                       child: DropdownButtonFormField<int>(
-                        value: _logic.selectedKelasId, // AMBIL DARI LOGIC
-                        hint: const Text("Pilih Kelas"),
+                        value: _logic.itemLimit,
+                        decoration: InputDecoration(
+                          labelText: 'Show',
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        items: [5, 10, 15, 20, 50]
+                            .map(
+                              (val) => DropdownMenuItem(
+                                value: val,
+                                child: Text(val.toString()),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            // Panggil fungsi updateLimit di Logic
+                            _logic.updateLimit(val, searchController.text);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+
+                    // --- DROPDOWN KELAS ---
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<int>(
+                        value: _logic.selectedKelasId,
+                        hint: const Text("Semua Kelas"),
+                        isExpanded: true,
                         items: [
                           const DropdownMenuItem<int>(
                             value: null,
                             child: Text("Semua Kelas"),
                           ),
-                          ..._logic
-                              .kelasList // AMBIL DARI LOGIC
-                              .map(
-                                (kelas) => DropdownMenuItem<int>(
-                                  value: kelas['id'] as int,
-                                  child: Text(kelas['nama_kelas']),
-                                ),
+                          ..._logic.kelasList.map(
+                            (kelas) => DropdownMenuItem<int>(
+                              value: kelas['id'] as int,
+                              child: Text(
+                                kelas['nama_kelas'],
+                                overflow: TextOverflow.ellipsis,
                               ),
+                            ),
+                          ),
                         ],
                         onChanged: (value) {
-                          // PANGGIL LOGIC
                           _logic.onKelasSelected(value, searchController.text);
                         },
                         decoration: InputDecoration(
@@ -497,10 +610,13 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
+
+                    // --- SEARCH FIELD ---
                     Expanded(
+                      flex: 3,
                       child: TextField(
-                        controller: searchController, // Controller UI
+                        controller: searchController,
                         decoration: InputDecoration(
                           labelText: 'Cari Nama',
                           prefixIcon: const Icon(Icons.search),
@@ -508,34 +624,32 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        // onChanged di-handle oleh listener di initState
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
+
+                    // --- DROPDOWN STATUS ---
                     Expanded(
+                      flex: 2,
                       child: DropdownButtonFormField<String>(
-                        value: _logic.selectedStatus, // AMBIL DARI LOGIC
+                        value: _logic.selectedStatus,
                         hint: const Text("Semua Status"),
                         items: const [
+                          DropdownMenuItem(value: null, child: Text("Semua")),
                           DropdownMenuItem(
-                            value: null,
-                            child: Text("Semua Status"),
-                          ),
-                          DropdownMenuItem(
-                            value: "Aktif",
+                            value: "aktif",
                             child: Text("Aktif"),
                           ),
                           DropdownMenuItem(
-                            value: "Tidak Aktif",
-                            child: Text("Tidak Aktif"),
+                            value: "tidak aktif",
+                            child: Text("Tdk Aktif"),
                           ),
                           DropdownMenuItem(
-                            value: "Lulus",
+                            value: "lulus",
                             child: Text("Lulus"),
                           ),
                         ],
                         onChanged: (value) {
-                          // PANGGIL LOGIC
                           _logic.onStatusSelected(value, searchController.text);
                         },
                         decoration: InputDecoration(
@@ -553,7 +667,9 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
     );
   }
 
+  // 1. METHOD UTAMA: Membangun Tabel + Pagination
   Widget _buildTable() {
+    // Cek jika data kosong
     if (_logic.siswaData.isEmpty) {
       return const Center(
         child: Padding(
@@ -563,218 +679,289 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
       );
     }
 
-    const double tableMinWidth = 1100;
     const double colSpacing = 17.0;
+    final ScrollController horizontalController = ScrollController();
 
-    final ScrollController _horizontalController = ScrollController();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+    // Gunakan Column agar Tabel dan Pagination tersusun vertikal
+    return Column(
+      children: [
+        // --- BAGIAN A: TABEL DATA ---
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Scrollbar(
-            controller: _horizontalController,
-            thumbVisibility: true,
-            trackVisibility: true,
-            scrollbarOrientation: ScrollbarOrientation.bottom,
-            child: SingleChildScrollView(
-              controller: _horizontalController,
-              scrollDirection: Axis.horizontal,
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  bottom: 16,
-                ), // jarak agar scrollbar tidak mepet
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: tableMinWidth),
-                  child: DataTable(
-                    columnSpacing: colSpacing,
-                    headingRowHeight: 52,
-                    dataRowHeight: 60,
-                    headingRowColor: MaterialStateProperty.all(
-                      Colors.blue.shade50,
-                    ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final double minTableWidth = constraints.maxWidth;
 
-                    columns: const [
-                      DataColumn(
-                        label: SizedBox(
-                          width: 50,
-                          child: Center(
-                            child: Text(
-                              'No',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
+              return Scrollbar(
+                controller: horizontalController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                scrollbarOrientation: ScrollbarOrientation.bottom,
+                child: SingleChildScrollView(
+                  controller: horizontalController,
+                  scrollDirection: Axis.horizontal,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: minTableWidth),
+                      child: DataTable(
+                        columnSpacing: colSpacing,
+                        headingRowHeight: 52,
+                        dataRowHeight: 60,
+                        headingRowColor: MaterialStateProperty.all(
+                          Colors.blue.shade50,
                         ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 100,
-                          child: Center(
-                            child: Text(
-                              'NIS',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 240,
-                          child: Center(
-                            child: Text(
-                              'Nama',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 100,
-                          child: Center(
-                            child: Text(
-                              'Kelas',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 200,
-                          child: Center(
-                            child: Text(
-                              'Nama Ortu',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 120,
-                          child: Center(
-                            child: Text(
-                              'No. Ortu',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 92,
-                          child: Center(
-                            child: Text(
-                              'Status',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 140,
-                          child: Center(
-                            child: Text(
-                              'Aksi',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    rows: List.generate(_logic.siswaData.length, (i) {
-                      final s = _logic.siswaData[i];
-                      return DataRow(
-                        cells: [
-                          DataCell(Center(child: Text('${i + 1}'))),
-                          DataCell(Center(child: Text('${s['nis'] ?? '-'}'))),
-                          DataCell(Center(child: Text('${s['nama'] ?? '-'}'))),
-                          DataCell(
-                            Center(
+                        columns: const [
+                          DataColumn(
+                            label: Center(
                               child: Text(
-                                '${s['kelas']?['nama_kelas'] ?? '-'}',
+                                'No',
+                                style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                             ),
                           ),
-                          DataCell(
-                            Center(
-                              child: Text('${s['orang_tua_nama'] ?? '-'}'),
+                          DataColumn(
+                            label: Center(
+                              child: Text(
+                                'NIS',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
-                          DataCell(
-                            Center(
-                              child: Text('${s['orang_tua_nomor'] ?? '-'}'),
+                          DataColumn(
+                            label: Center(
+                              child: Text(
+                                'Nama',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
-                          DataCell(
-                            Center(child: Text('${s['status'] ?? '-'}')),
+                          DataColumn(
+                            label: Center(
+                              child: Text(
+                                'Kelas',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
                           ),
-                          DataCell(
-                            Center(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _buildAction(
-                                    Icons.qr_code_2,
-                                    'QR',
-                                    Colors.teal,
-                                    onPressed: () => _showBarcodeDialog(s),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  _buildAction(
-                                    Icons.edit,
-                                    'Edit',
-                                    Colors.blue,
-                                    onPressed: () => _showSiswaForm(siswa: s),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  _buildAction(
-                                    Icons.delete,
-                                    'Hapus',
-                                    Colors.red,
-                                    onPressed: () => _showDeleteConfirmDialog(
-                                      s['id'],
-                                      s['nama'],
-                                    ),
-                                  ),
-                                ],
+                          DataColumn(
+                            label: Center(
+                              child: Text(
+                                'Nama Ortu',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Center(
+                              child: Text(
+                                'No. Ortu',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Center(
+                              child: Text(
+                                'Status',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Center(
+                              child: Text(
+                                'Aksi',
+                                style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                             ),
                           ),
                         ],
-                      );
-                    }),
+                        rows: List.generate(_logic.siswaData.length, (i) {
+                          final s = _logic.siswaData[i];
+
+                          // --- LOGIKA NOMOR URUT ---
+                          // (Halaman saat ini - 1) * Limit + Index + 1
+                          // Contoh Hal 2, limit 10, data pertama: (1 * 10) + 0 + 1 = 11
+                          final int rowNumber =
+                              ((_logic.currentPage - 1) * _logic.itemLimit) +
+                              i +
+                              1;
+
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                Center(child: Text('$rowNumber')),
+                              ), // Gunakan rowNumber
+                              DataCell(
+                                Center(child: Text('${s['nis'] ?? '-'}')),
+                              ),
+                              DataCell(
+                                Center(child: Text('${s['nama'] ?? '-'}')),
+                              ),
+                              DataCell(
+                                Center(
+                                  child: Text(
+                                    '${s['kelas']?['nama_kelas'] ?? '-'}',
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Center(
+                                  child: Text('${s['orang_tua_nama'] ?? '-'}'),
+                                ),
+                              ),
+                              DataCell(
+                                Center(
+                                  child: Text('${s['orang_tua_nomor'] ?? '-'}'),
+                                ),
+                              ),
+                              DataCell(
+                                Center(child: Text('${s['status'] ?? '-'}')),
+                              ),
+                              DataCell(
+                                Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildAction(
+                                        Icons.qr_code_2,
+                                        'QR',
+                                        Colors.teal,
+                                        onPressed: () => _showBarcodeDialog(s),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      _buildAction(
+                                        Icons.edit,
+                                        'Edit',
+                                        Colors.blue,
+                                        onPressed: () =>
+                                            _showSiswaForm(siswa: s),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      _buildAction(
+                                        Icons.delete,
+                                        'Hapus',
+                                        Colors.red,
+                                        onPressed: () =>
+                                            _showDeleteConfirmDialog(
+                                              s['id'],
+                                              s['nama'],
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                      ),
+                    ),
                   ),
                 ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 20), // Jarak antara tabel dan pagination
+        // --- BAGIAN B: PAGINATION (Next/Prev) ---
+        _buildPagination(),
+
+        const SizedBox(height: 50), // Jarak aman bawah
+      ],
+    );
+  }
+
+  // 2. METHOD HELPER: Membuat Tombol Navigasi
+  Widget _buildPagination() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        // Info Halaman (1 - 10 dari 50)
+        Text(
+          _logic.paginationInfo,
+          style: const TextStyle(
+            color: Colors.grey,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 16),
+
+        // Tombol Previous
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.chevron_left),
+            tooltip: "Sebelumnya",
+            // Disable tombol jika di halaman 1
+            onPressed: _logic.currentPage > 1
+                ? () => _logic.previousPage(searchController.text)
+                : null,
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        // Kotak Nomor Halaman
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.blue,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.3),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
               ),
+            ],
+          ),
+          child: Text(
+            "${_logic.currentPage}",
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
           ),
-        ],
-      ),
+        ),
+
+        const SizedBox(width: 8),
+
+        // Tombol Next
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: "Selanjutnya",
+            // Disable tombol jika sudah di halaman terakhir
+            onPressed: _logic.currentPage < _logic.totalPages
+                ? () => _logic.nextPage(searchController.text)
+                : null,
+          ),
+        ),
+      ],
     );
   }
 

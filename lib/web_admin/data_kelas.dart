@@ -238,7 +238,6 @@ class _KelasDataTable extends StatelessWidget {
     final ScrollController _horizontalController = ScrollController();
 
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -251,10 +250,13 @@ class _KelasDataTable extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Scrollbar(
+      // MENGGUNAKAN LAYOUTBUILDER DI SINI
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Mengambil lebar maksimal container yang tersedia
+          final double minTableWidth = constraints.maxWidth;
+
+          return Scrollbar(
             controller: _horizontalController,
             thumbVisibility: true,
             trackVisibility: true,
@@ -263,24 +265,27 @@ class _KelasDataTable extends StatelessWidget {
               controller: _horizontalController,
               scrollDirection: Axis.horizontal,
               child: Padding(
-                padding: const EdgeInsets.only(bottom: 16), // jarak scrollbar
+                padding: const EdgeInsets.only(bottom: 16),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 1210),
+                  // UBAH: minWidth diset mengikuti constraints.maxWidth
+                  // Agar tabel mengisi penuh layar kanan-kiri
+                  constraints: BoxConstraints(minWidth: minTableWidth),
                   child: DataTable(
-                    columnSpacing: 24,
+                    columnSpacing: 12,
                     headingRowHeight: 50,
                     dataRowHeight: 60,
                     headingRowColor: MaterialStateProperty.all(
                       Colors.blue.shade50,
                     ),
+
+                    // --- BAGIAN HEADER (COLUMNS) ---
                     columns: const [
                       DataColumn(
                         label: SizedBox(
-                          width: 50,
+                          width: 40,
                           child: Center(
                             child: Text(
                               'ID',
-                              textAlign: TextAlign.center,
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -288,11 +293,43 @@ class _KelasDataTable extends StatelessWidget {
                       ),
                       DataColumn(
                         label: SizedBox(
-                          width: 160,
+                          width: 100,
                           child: Center(
                             child: Text(
                               'Nama Kelas',
-                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: SizedBox(
+                          width: 150,
+                          child: Center(
+                            child: Text(
+                              'Wali Kelas',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: SizedBox(
+                          width: 90,
+                          child: Center(
+                            child: Text(
+                              'Jam Masuk',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: SizedBox(
+                          width: 90,
+                          child: Center(
+                            child: Text(
+                              'Jam Pulang',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -303,79 +340,98 @@ class _KelasDataTable extends StatelessWidget {
                           width: 160,
                           child: Center(
                             child: Text(
-                              'Wali Kelas',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 120,
-                          child: Center(
-                            child: Text(
-                              'Jam Masuk',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 120,
-                          child: Center(
-                            child: Text(
-                              'Jam Pulang',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 200,
-                          child: Center(
-                            child: Text(
                               'Aksi',
-                              textAlign: TextAlign.center,
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
                       ),
                     ],
+
+                    // --- BAGIAN ISI DATA (ROWS) ---
                     rows: List.generate(kelasData.length, (i) {
                       final s = kelasData[i];
                       final waliNama = s['wali_nama'] ?? '-';
+
                       return DataRow(
                         cells: [
-                          DataCell(Center(child: Text(s['id'].toString()))),
-                          DataCell(Center(child: Text(s['nama_kelas'] ?? '-'))),
-                          DataCell(Center(child: Text(waliNama))),
-                          DataCell(Center(child: Text(s['jam_masuk'] ?? '-'))),
-                          DataCell(Center(child: Text(s['jam_pulang'] ?? '-'))),
+                          // SEL 1: ID
                           DataCell(
-                            Center(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _buildAction(
-                                    Icons.edit,
-                                    'Edit',
-                                    Colors.blue,
-                                    () => onEdit(s),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _buildAction(
-                                    Icons.visibility,
-                                    'Lihat',
-                                    Colors.green,
-                                    () => onView(s['id'].toString()),
-                                  ),
-                                ],
+                            SizedBox(
+                              width: 40,
+                              child: Center(child: Text(s['id'].toString())),
+                            ),
+                          ),
+
+                          // SEL 2: NAMA KELAS
+                          DataCell(
+                            SizedBox(
+                              width: 100,
+                              child: Center(
+                                child: Text(
+                                  s['nama_kelas'] ?? '-',
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // SEL 3: WALI KELAS
+                          DataCell(
+                            SizedBox(
+                              width: 150,
+                              child: Center(
+                                child: Text(
+                                  waliNama,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // SEL 4: JAM MASUK
+                          DataCell(
+                            SizedBox(
+                              width: 90,
+                              child: Center(child: Text(s['jam_masuk'] ?? '-')),
+                            ),
+                          ),
+
+                          // SEL 5: JAM PULANG
+                          DataCell(
+                            SizedBox(
+                              width: 90,
+                              child: Center(
+                                child: Text(s['jam_pulang'] ?? '-'),
+                              ),
+                            ),
+                          ),
+
+                          // SEL 6: AKSI
+                          DataCell(
+                            SizedBox(
+                              width: 160,
+                              child: Center(
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    _buildAction(
+                                      Icons.edit,
+                                      'Edit',
+                                      Colors.blue,
+                                      () => onEdit(s),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _buildAction(
+                                      Icons.visibility,
+                                      'Lihat',
+                                      Colors.green,
+                                      () => onView(s['id'].toString()),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -386,8 +442,8 @@ class _KelasDataTable extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
