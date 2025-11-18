@@ -368,37 +368,66 @@ class _AbsensiTable extends StatelessWidget {
                   DataColumn(
                     label: SizedBox(
                       width: 150, // Nama siswa lebih panjang
-                      child: Text('Nama Siswa', textAlign: TextAlign.left),
+                      child: Text(
+                        'Nama Siswa',
+                        textAlign: TextAlign.left,
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                   DataColumn(
                     label: SizedBox(
                       width: 100,
-                      child: Center(child: Text('Tanggal')),
+                      child: Center(
+                        child: Text(
+                          'Tanggal',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ),
                   DataColumn(
                     label: SizedBox(
                       width: 90,
-                      child: Center(child: Text('Status')),
+                      child: Center(
+                        child: Text(
+                          'Status',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ),
                   DataColumn(
                     label: SizedBox(
                       width: 110,
-                      child: Center(child: Text('Waktu Masuk')),
+                      child: Center(
+                        child: Text(
+                          'Waktu Masuk',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ),
                   DataColumn(
                     label: SizedBox(
                       width: 110,
-                      child: Center(child: Text('Waktu Pulang')),
+                      child: Center(
+                        child: Text(
+                          'Waktu Pulang',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ),
                   DataColumn(
                     label: SizedBox(
                       width: 180,
-                      child: Center(child: Text('Keterangan')),
+                      child: Center(
+                        child: Text(
+                          'Keterangan',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ),
                 ],
