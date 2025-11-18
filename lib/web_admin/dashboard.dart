@@ -49,23 +49,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     const Color(0xFF7E57C2), // Deep Purple
     const Color(0xFFD4E157), // Lime
   ];
-  // --- AKHIR BARU ---
-
-  // Data statis (belum dihubungkan ke Supabase)
-  final List<Map<String, dynamic>> _alerts = [
-    {
-      'icon': Icons.warning_amber_rounded,
-      'color': const Color(0xFFFFA726),
-      'title': 'Guru yang belum input validasi',
-      'subtitle': '5 guru belum melakukan validasi kehadiran hari ini',
-    },
-    {
-      'icon': Icons.person_off_outlined,
-      'color': const Color(0xFFEF5350),
-      'title': 'Siswa dengan alpha beruntun',
-      'subtitle': '12 siswa telah alpha lebih dari 3 hari berturut-turut',
-    },
-  ];
+  
+  
+  List<Map<String, dynamic>> _alerts = [];
 
   @override
   void initState() {
@@ -256,6 +242,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
       // --- AKHIR BARU ---
+      // --- 3. LOGIKA ALERTS ANOMALI (DIPINDAHKAN KE SINI) ---
+      // Logika ini HARUS di dalam fungsi, setelah data absensiRes tersedia
+      
+      List<Map<String, dynamic>> anomalyAlerts = [];
+      int inputLuarJam = 0;
+      int totalTerlambatAnomali = 0;
+
+      for (var data in absensiRes) {
+        // Cek Status Terlambat untuk Alerts
+        if (data['status']?.toString().toLowerCase() == 'terlambat') {
+          totalTerlambatAnomali++;
+        }
+
+        // Cek Waktu Input
+        final String? timeStr = data['created_at']?.toString();
+        if (timeStr != null) {
+          final DateTime entryTime = DateTime.parse(timeStr).toLocal();
+          // Anomali jika < jam 6 pagi ATAU > jam 5 sore
+          if (entryTime.hour < 6 || entryTime.hour >= 17) {
+            inputLuarJam++;
+          }
+        }
+      }
+
+      // Alert 1: Input Luar Jam
+      if (inputLuarJam > 0) {
+        anomalyAlerts.add({
+          'icon': Icons.access_time_filled,
+          'color': const Color(0xFFEF5350),
+          'title': 'Aktivitas Luar Jam Operasional',
+          'subtitle': 'Terdeteksi $inputLuarJam data diinput di luar jam sekolah.',
+        });
+      }
+
+      // Alert 2: Aktivitas Hari Minggu
+      if (now.weekday == DateTime.sunday && absensiRes.isNotEmpty) {
+        anomalyAlerts.add({
+          'icon': Icons.event_busy,
+          'color': const Color(0xFFFFA726),
+          'title': 'Aktivitas di Hari Libur',
+          'subtitle': 'Sistem mendeteksi input data absensi pada hari Minggu.',
+        });
+      }
+
+      // Alert 3: Lonjakan Keterlambatan (> 20%)
+      if (totalSiswa > 0) {
+        final double persentaseTerlambat = totalTerlambatAnomali / totalSiswa;
+        if (persentaseTerlambat > 0.20) {
+          anomalyAlerts.add({
+            'icon': Icons.warning_rounded,
+            'color': Colors.purple,
+            'title': 'Lonjakan Keterlambatan',
+            'subtitle': 'Lebih dari 20% siswa terlambat hari ini.',
+          });
+        }
+      }
+
+      // Alert 4: Normal
+      if (anomalyAlerts.isEmpty) {
+        anomalyAlerts.add({
+          'icon': Icons.verified_user,
+          'color': const Color(0xFF66BB6A),
+          'title': 'Sistem Berjalan Normal',
+          'subtitle': 'Tidak ditemukan anomali pada data absensi hari ini.',
+        });
+      }
+      // --- AKHIR LOGIKA ALERTS ---
 
       // 6. Update state
       setState(() {
@@ -274,9 +327,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _hadirSemester = hadirSem;
         _terlambatSemester = terlambatSem;
         _absenSemester = absenSem;
-        _totalHariSemester =
-            hariUnik.length; // Total hari sekolah yg ada datanya
-        // --- AKHIR BARU ---
+        _totalHariSemester = hariUnik.length; // Total hari sekolah yg ada datanya
+        
+        _alerts = anomalyAlerts;
 
         _isLoading = false;
       });
@@ -365,10 +418,8 @@ class _AppHeader extends StatelessWidget {
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const Spacer(),
-          Expanded(flex: 2, child: _SearchBar()),
-          const SizedBox(width: 20),
-          _NotificationBadge(),
-          const SizedBox(width: 20),
+          // Expanded(flex: 2, child: _SearchBar()),
+          // const SizedBox(width: 20),
           _ProfileSection(),
         ],
       ),
@@ -376,67 +427,36 @@ class _AppHeader extends StatelessWidget {
   }
 }
 
-class _SearchBar extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 15),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.search, color: Colors.grey, size: 20),
-          SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: "Cari data...",
-                hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
-                border: InputBorder.none,
-                isDense: true,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NotificationBadge extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        const Icon(Icons.notifications_none, size: 26),
-        Positioned(
-          right: -2,
-          top: -2,
-          child: Container(
-            padding: const EdgeInsets.all(5),
-            decoration: const BoxDecoration(
-              color: Colors.red,
-              shape: BoxShape.circle,
-            ),
-            child: const Text(
-              "3", // Ini masih statis, bisa di-update nanti
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
+// class _SearchBar extends StatelessWidget {
+//   @override
+//   Widget build(BuildContext context) {
+//     return Container(
+//       height: 40,
+//       padding: const EdgeInsets.symmetric(horizontal: 15),
+//       decoration: BoxDecoration(
+//         color: Colors.grey.shade50,
+//         borderRadius: BorderRadius.circular(30),
+//         border: Border.all(color: Colors.grey.shade200),
+//       ),
+//       child: const Row(
+//         children: [
+//           Icon(Icons.search, color: Colors.grey, size: 20),
+//           SizedBox(width: 10),
+//           Expanded(
+//             child: TextField(
+//               decoration: InputDecoration(
+//                 hintText: "Cari data...",
+//                 hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+//                 border: InputBorder.none,
+//                 isDense: true,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
 
 class _ProfileSection extends StatelessWidget {
   @override
@@ -846,12 +866,12 @@ class _StatistikKehadiranChart extends StatefulWidget {
 class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
   final SupabaseClient supabase = Supabase.instance.client;
 
-  int _selectedFilterIndex = 0; // 0: Hari Ini, 1: Minggu, 2: Bulan, 3: Tahun
+  int _selectedFilterIndex = 0; // 0: Hari Ini, 1: Minggu, 2: Bulan, 3: Periode
   final List<String> _filters = [
     'Hari Ini',
     'Minggu Ini',
     'Bulan Ini',
-    'Tahun Ini',
+    'Periode',
   ];
 
   bool _isLoading = true;

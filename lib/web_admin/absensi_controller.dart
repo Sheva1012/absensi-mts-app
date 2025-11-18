@@ -478,4 +478,58 @@ class AbsensiController extends ChangeNotifier {
     if (tod == null) return '-';
     return '${tod.hour.toString().padLeft(2, '0')}:${tod.minute.toString().padLeft(2, '0')}';
   }
+
+  // Tambahkan ini di dalam class AbsensiController
+  int currentPage = 1;
+  int itemLimit = 10; // Default 10 data per halaman
+
+  // Getter untuk mengambil data sesuai halaman (Slice Data)
+  List<Map<String, dynamic>> get paginatedData {
+    int startIndex = (currentPage - 1) * itemLimit;
+    int endIndex = startIndex + itemLimit;
+
+    if (startIndex >= absensiData.length) {
+      return [];
+    }
+
+    return absensiData.sublist(
+      startIndex,
+      endIndex > absensiData.length ? absensiData.length : endIndex,
+    );
+  }
+
+  int get totalPages => (absensiData.length / itemLimit).ceil();
+
+  // Fungsi Ganti Limit
+  void updateLimit(int? limit) {
+    if (limit != null) {
+      itemLimit = limit;
+      currentPage = 1; // Reset ke halaman 1
+      notifyListeners();
+    }
+  }
+
+  // Fungsi Next Page
+  void nextPage() {
+    if (currentPage < totalPages) {
+      currentPage++;
+      notifyListeners();
+    }
+  }
+
+  // Fungsi Prev Page
+  void prevPage() {
+    if (currentPage > 1) {
+      currentPage--;
+      notifyListeners();
+    }
+  }
+
+  // PENTING: Tambahkan ini di dalam fungsi fetchAbsensi()
+  // agar saat filter berubah, halaman kembali ke 1
+  // fetchAbsensi() async {
+  //    ... logika fetch ...
+  //    currentPage = 1; // <--- Tambahkan reset ini
+  //    notifyListeners();
+  // }
 }

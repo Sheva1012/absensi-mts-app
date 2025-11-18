@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math'; // Wajib untuk logika pagination (min)
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +29,11 @@ class _DataSuratPageState extends State<DataSuratPage> {
   bool isLoading = true;
   List<Map<String, dynamic>> suratData = [];
 
+  // --- STATE PAGINATION BARU ---
+  int _currentPage = 1;
+  int _rowsPerPage = 10; // Default show 10 data
+  // -----------------------------
+
   // Filter States
   String? selectedJenisSurat;
   DateTime? selectedStartDate;
@@ -41,7 +47,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
     fetchSurat();
   }
 
-  /// 📥 Fetch Data Surat dari Supabase (Kode tetap sama)
+  /// 📥 Fetch Data Surat dari Supabase
   Future<void> fetchSurat() async {
     setState(() => isLoading = true);
     try {
@@ -83,6 +89,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
       setState(() {
         suratData = allData;
         isLoading = false;
+        _currentPage = 1; // Reset ke halaman 1 setiap kali data berubah/filter
       });
     } catch (e, stacktrace) {
       print('==================================================');
@@ -112,25 +119,21 @@ class _DataSuratPageState extends State<DataSuratPage> {
   }
 
   /// 📤 Menangani Download/Konversi PDF
-  /// Logika ini sekarang menangani konversi jika URL adalah gambar,
-  /// dan memicu download otomatis untuk web/mobile.
   Future<void> _handleDownload(String fileUrl, String fileName) async {
     if (fileUrl.isEmpty) {
       _showSnackbar('URL file tidak tersedia.');
       return;
     }
 
-    // Cek apakah URL adalah gambar yang mungkin perlu dikonversi
     final isImage =
         fileUrl.toLowerCase().contains('.png') ||
         fileUrl.toLowerCase().contains('.jpg') ||
         fileUrl.toLowerCase().contains('.jpeg') ||
-        fileUrl.toLowerCase().contains('.webp'); // asumsi ini bisa diconvert
+        fileUrl.toLowerCase().contains('.webp');
 
     if (isImage) {
       _showSnackbar('Mulai mengunduh dan mengkonversi gambar ke PDF...');
       try {
-        // 1. Ambil data gambar dari URL
         final response = await http.get(Uri.parse(fileUrl));
         if (response.statusCode != 200) {
           _showSnackbar(
@@ -139,12 +142,8 @@ class _DataSuratPageState extends State<DataSuratPage> {
           return;
         }
         final imageBytes = response.bodyBytes;
-
-        // 2. Buat objek PDF
         final pdf = pw.Document();
         final image = pw.MemoryImage(imageBytes);
-
-        // 3. Tambahkan gambar ke PDF (disesuaikan agar pas di halaman A4)
         pdf.addPage(
           pw.Page(
             pageFormat: PdfPageFormat.a4,
@@ -156,14 +155,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
             },
           ),
         );
-
-        // 4. Simpan PDF ke bytes
         final Uint8List pdfBytes = await pdf.save();
         final finalFileName = '$fileName.pdf';
 
-        // 5. Memicu Download berdasarkan Platform
         if (kIsWeb) {
-          // Khusus Flutter Web: Memicu download otomatis
           final blob = html.Blob([pdfBytes]);
           final url = html.Url.createObjectUrlFromBlob(blob);
           html.AnchorElement(href: url)
@@ -172,12 +167,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
           html.Url.revokeObjectUrl(url);
           _showSnackbar('PDF berhasil dibuat dan diunduh.');
         } else {
-          // Mobile/Desktop: Simpan ke direktori download/aplikasi dan buka
           final directory = await getApplicationDocumentsDirectory();
           final file = File('${directory.path}/$finalFileName');
           await file.writeAsBytes(pdfBytes);
-
-          // Coba membuka file (Tergantung OS, bisa memicu viewer/download)
           final success = await launchUrl(Uri.file(file.path));
           if (success) {
             _showSnackbar('PDF berhasil dibuat. File dibuka: ${file.path}');
@@ -186,22 +178,15 @@ class _DataSuratPageState extends State<DataSuratPage> {
           }
         }
       } catch (e, stacktrace) {
-        print('==================================================');
-        print('❌ Error converting/downloading PDF: $e');
-        print('Stacktrace: $stacktrace');
-        print('==================================================');
+        print('❌ Error: $e');
         _showSnackbar('Gagal mengkonversi/mengunduh PDF. Cek log konsol.');
       }
     } else {
-      // Jika URL bukan gambar (misalnya, sudah PDF atau jenis dokumen lain)
-      // Gunakan url_launcher untuk membuka/mengunduh URL aslinya
       final Uri uri = Uri.parse(fileUrl);
-
       if (!await canLaunchUrl(uri)) {
         _showSnackbar('URL tidak valid atau browser tidak bisa dibuka.');
         return;
       }
-
       try {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         _showSnackbar('Membuka file asli...');
@@ -232,7 +217,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
             const SizedBox(height: 20),
             isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _buildTable(),
+                : _buildTable(), // Memanggil method yang sudah dimodifikasi (Table + Pagination)
           ],
         ),
       ),
@@ -259,7 +244,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text(
-            'Data Surat Izin/Sakit Siswa',
+            'Data Surat Siswa',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -312,9 +297,44 @@ class _DataSuratPageState extends State<DataSuratPage> {
           Wrap(
             spacing: 16,
             runSpacing: 16,
+            crossAxisAlignment:
+                WrapCrossAlignment.center, // Agar sejajar vertikal
             children: [
+              // --- 1. DROPDOWN SHOW (JUMLAH DATA) ---
               SizedBox(
-                width: 230,
+                width: 90,
+                child: DropdownButtonFormField<int>(
+                  value: _rowsPerPage,
+                  decoration: InputDecoration(
+                    labelText: 'Show',
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  items: [5, 10, 20, 50]
+                      .map(
+                        (val) => DropdownMenuItem(
+                          value: val,
+                          child: Text(val.toString()),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _rowsPerPage = val;
+                        _currentPage =
+                            1; // Reset ke halaman 1 jika limit berubah
+                      });
+                    }
+                  },
+                ),
+              ),
+
+              // --- Filter Tanggal & Jenis (Existing) ---
+              SizedBox(
+                width: 220, // Sedikit dikecilkan agar muat
                 child: _buildDateFilter('Dari Tanggal', selectedStartDate, (
                   date,
                 ) {
@@ -325,7 +345,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
                 }),
               ),
               SizedBox(
-                width: 230,
+                width: 220,
                 child: _buildDateFilter('Sampai Tanggal', selectedEndDate, (
                   date,
                 ) {
@@ -336,10 +356,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
                 }),
               ),
               SizedBox(
-                width: 230,
+                width: 220,
                 child: DropdownButtonFormField<String>(
                   value: selectedJenisSurat,
-                  hint: const Text("Pilih Jenis Surat"),
+                  hint: const Text("Pilih Jenis"),
                   items: [
                     const DropdownMenuItem(
                       value: null,
@@ -369,7 +389,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
                 ),
               ),
               SizedBox(
-                width: 230,
+                width: 385,
                 child: TextField(
                   controller: searchController,
                   decoration: InputDecoration(
@@ -437,6 +457,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
     );
   }
 
+  // --- 2. LOGIKA PAGINATION & TABEL ---
   Widget _buildTable() {
     if (suratData.isEmpty) {
       return const Center(
@@ -447,116 +468,236 @@ class _DataSuratPageState extends State<DataSuratPage> {
       );
     }
 
-    return Container(
-      // Hapus width: double.infinity di sini karena akan ditangani oleh LayoutBuilder/parent
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+    // Logika Slicing Data
+    final int startIndex = (_currentPage - 1) * _rowsPerPage;
+    final int endIndex = min(startIndex + _rowsPerPage, suratData.length);
+
+    // Safety Check
+    if (startIndex >= suratData.length && suratData.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() => _currentPage = 1);
+      });
+      return const SizedBox.shrink();
+    }
+
+    final List<Map<String, dynamic>> currentData = suratData.sublist(
+      startIndex,
+      suratData.isEmpty ? 0 : endIndex,
+    );
+
+    // Mengembalikan Column agar Pagination bisa ditaruh di bawah
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // Gunakan lebar maksimum yang tersedia sebagai lebar minimum untuk DataTable
-          final double minTableWidth = constraints.maxWidth;
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              double minTableWidth = constraints.maxWidth;
+              // Anti NaN fix
+              if (!minTableWidth.isFinite) minTableWidth = 0.0;
 
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              // Menggunakan minWidth: minTableWidth akan membuat tabel mengisi lebar penuh,
-              // tetapi jika total lebar kolom melebihi minTableWidth, ia akan melebar dan
-              // SingleChildScrollView akan mengaktifkan scrolling.
-              constraints: BoxConstraints(minWidth: minTableWidth),
-              child: DataTable(
-                columnSpacing: 24,
-                headingRowHeight: 56,
-                dataRowHeight: 64,
-                headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
-                columns: const [
-                  DataColumn(
-                    label: Text(
-                      'ID Surat',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: minTableWidth),
+                  child: DataTable(
+                    columnSpacing: 24,
+                    headingRowHeight: 56,
+                    dataRowHeight: 64,
+                    headingRowColor: MaterialStateProperty.all(
+                      Colors.blue.shade50,
                     ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'ID Siswa',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Nama Siswa',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Tanggal',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Jenis Surat',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Aksi',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-                rows: List.generate(suratData.length, (i) {
-                  final s = suratData[i];
-                  // Pastikan Anda telah mengimpor package intl
-                  // import 'package:intl/intl.dart';
-                  final tanggal = s['tanggal'] != null
-                      ? DateFormat(
-                          'dd MMM yyyy',
-                        ).format(DateTime.parse(s['tanggal']))
-                      : '-';
-
-                  return DataRow(
-                    cells: [
-                      DataCell(Text('${s['id'] ?? '-'}')),
-                      DataCell(Text('${s['siswa_id'] ?? '-'}')),
-                      DataCell(Text('${s['siswa']?['nama'] ?? '-'}')),
-                      DataCell(Text(tanggal)),
-                      DataCell(Text('${s['jenis'] ?? '-'}')),
-                      DataCell(
-                        Row(
-                          children: [
-                            _buildAction(
-                              Icons.visibility,
-                              'Lihat',
-                              Colors.green,
-                              () => _showDetailDialog(s),
-                            ),
-                          ],
+                    columns: const [
+                      DataColumn(
+                        label: Text(
+                          'No', // Ubah ID Surat jadi No Urut
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'ID Siswa',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Nama Siswa',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Tanggal',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Jenis Surat',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Aksi',
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],
-                  );
-                }),
-              ),
-            ),
-          );
-        },
-      ),
+                    rows: List.generate(currentData.length, (i) {
+                      final s = currentData[i];
+                      final tanggal = s['tanggal'] != null
+                          ? DateFormat(
+                              'dd MMM yyyy',
+                            ).format(DateTime.parse(s['tanggal']))
+                          : '-';
+
+                      // Hitung nomor urut global
+                      final int rowNumber = startIndex + i + 1;
+
+                      return DataRow(
+                        cells: [
+                          DataCell(Text('$rowNumber')),
+                          DataCell(Text('${s['siswa_id'] ?? '-'}')),
+                          DataCell(Text('${s['siswa']?['nama'] ?? '-'}')),
+                          DataCell(Text(tanggal)),
+                          DataCell(Text('${s['jenis'] ?? '-'}')),
+                          DataCell(
+                            Row(
+                              children: [
+                                _buildAction(
+                                  Icons.visibility,
+                                  'Lihat',
+                                  Colors.green,
+                                  () => _showDetailDialog(s),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // --- 3. TOMBOL PAGINATION ---
+        _buildPaginationControls(),
+
+        const SizedBox(height: 50), // Jarak bawah aman
+      ],
     );
   }
 
-  /// ℹ️ Dialog Detail Surat
+  /// Widget Kontrol Pagination di Kanan Bawah
+  Widget _buildPaginationControls() {
+    if (suratData.isEmpty) return const SizedBox.shrink();
+
+    final int totalPages = (suratData.length / _rowsPerPage).ceil();
+    final int startItem = ((_currentPage - 1) * _rowsPerPage) + 1;
+    final int endItem = min(_currentPage * _rowsPerPage, suratData.length);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end, // Rata Kanan
+      children: [
+        // Info Data (Contoh: "1 - 10 dari 50")
+        Text(
+          "$startItem - $endItem dari ${suratData.length}",
+          style: const TextStyle(
+            color: Colors.grey,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 16),
+
+        // Tombol Previous
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.chevron_left),
+            tooltip: "Sebelumnya",
+            onPressed: _currentPage > 1
+                ? () {
+                    setState(() {
+                      _currentPage--;
+                    });
+                  }
+                : null,
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        // Indikator Halaman (Kotak Biru)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.blue,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.3),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            "$_currentPage",
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        // Tombol Next
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: "Selanjutnya",
+            onPressed: _currentPage < totalPages
+                ? () {
+                    setState(() {
+                      _currentPage++;
+                    });
+                  }
+                : null,
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showDetailDialog(Map<String, dynamic> surat) {
     final String tanggal = surat['tanggal'] != null
         ? DateFormat(
@@ -597,7 +738,6 @@ class _DataSuratPageState extends State<DataSuratPage> {
                           Navigator.of(
                             context,
                           ).pop(); // Tutup dialog sebelum download
-                          // Buat nama file yang unik untuk download
                           final filename =
                               'surat_${surat['id'] ?? 'unknown'}_${surat['jenis'] ?? 'file'}';
                           _handleDownload(
