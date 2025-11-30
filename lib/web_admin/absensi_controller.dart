@@ -12,15 +12,26 @@ class AbsensiController extends ChangeNotifier {
   final String schoolName;
 
   // --- State ---
-  bool _isLoading = true;
-  bool _isKelasLoading = true;
+  bool _isLoading = false;
+  bool _isKelasLoading = false;
+  
+  // Data Tabel
   List<Map<String, dynamic>> _absensiData = [];
+  
+  // Data Kelas
   List<Map<String, dynamic>> _daftarKelas = [];
+  
+  // Filter Aktif
   DateTime _selectedDate = DateTime.now();
   int? _selectedKelasId;
 
+  // Pagination State
+  int _currentPage = 1;
+  int _itemLimit = 10;
+  int _totalRows = 0; 
+
   AbsensiController({required this.schoolName}) {
-    _initializeData();
+    _init();
   }
 
   // --- Getters ---
@@ -30,23 +41,19 @@ class AbsensiController extends ChangeNotifier {
   List<Map<String, dynamic>> get daftarKelas => _daftarKelas;
   DateTime get selectedDate => _selectedDate;
   int? get selectedKelasId => _selectedKelasId;
+  
+  int get currentPage => _currentPage;
+  int get itemLimit => _itemLimit;
+  int get totalRows => _totalRows;
+  int get totalPages => _itemLimit > 0 ? (_totalRows / _itemLimit).ceil() : 0;
 
-  set isLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
+  void _init() {
+    fetchDaftarKelas();
+    fetchAbsensi();
   }
 
-  void debugLog(String message) => debugPrint('[ABSENSI DEBUG] $message');
-
-  // --- Inisialisasi ---
-  Future<void> _initializeData() async {
-    await fetchDaftarKelas();
-    await fetchAbsensi();
-  }
-
-  // --- Ambil daftar kelas ---
+  // --- 1. FETCH DAFTAR KELAS ---
   Future<void> fetchDaftarKelas() async {
-    debugLog('Mulai fetch daftar kelas...');
     _isKelasLoading = true;
     notifyListeners();
 
@@ -58,478 +65,271 @@ class AbsensiController extends ChangeNotifier {
 
       _daftarKelas = List<Map<String, dynamic>>.from(response);
       _daftarKelas.insert(0, {'id': null, 'nama_kelas': 'Semua Kelas'});
-      _selectedKelasId = null;
-    } catch (e, st) {
-      debugLog('Error fetchDaftarKelas: $e\n$st');
-      _daftarKelas = [
-        {'id': null, 'nama_kelas': 'Semua Kelas'},
-      ];
+    } catch (e) {
+      debugPrint("Error fetch kelas: $e");
     } finally {
       _isKelasLoading = false;
       notifyListeners();
     }
   }
 
+  // --- 2. FETCH ABSENSI (Server-Side Pagination) ---
   Future<void> fetchAbsensi() async {
-    isLoading = true;
-    debugLog('Mulai fetch absensi...');
+    _isLoading = true;
+    notifyListeners();
 
     try {
-      final tglFilter = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final localKelasId = _selectedKelasId;
+      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      
+      final int from = (_currentPage - 1) * _itemLimit;
+      final int to = from + _itemLimit - 1;
 
-      // ✅ 1️⃣ Ambil semua siswa aktif
-      final siswaResult = localKelasId == null
-          ? await supabase
-                .from('siswa')
-                .select('id, nama, kelas_id, status')
-                .order('nama')
-          : await supabase
-                .from('siswa')
-                .select('id, nama, kelas_id, status')
-                .eq('kelas_id', localKelasId)
-                .order('nama');
-
-      final siswaList = List<Map<String, dynamic>>.from(siswaResult);
-      debugLog('Jumlah siswa: ${siswaList.length}');
-
-      // ✅ 2️⃣ Ambil absensi hari itu
-      final absensiResult = await supabase
+      // PERBAIKAN 1 & 2: Hapus FetchOptions, gunakan method chaining
+      var query = supabase
           .from('absensi')
-          .select(
-            'id, siswa_id, tanggal, status, waktu_masuk, waktu_pulang, '
-            'keterangan, updated_by, guru (nama)',
-          )
-          .eq('tanggal', tglFilter);
+          .select('*, siswa!inner(id, nama, nis, kelas_id)') 
+          .eq('tanggal', dateStr);
 
-      final absensiList = List<Map<String, dynamic>>.from(absensiResult);
-      debugLog('Jumlah absensi tanggal $tglFilter: ${absensiList.length}');
-
-      // ✅ 3️⃣ Gabungkan data
-      final merged = <Map<String, dynamic>>[];
-      for (final siswa in siswaList) {
-        final abs = absensiList.firstWhere(
-          (a) => a['siswa_id'] == siswa['id'],
-          orElse: () => {},
-        );
-
-        merged.add(
-          abs.isEmpty
-              ? {
-                  'id': null,
-                  'siswa_id': siswa['id'],
-                  'tanggal': tglFilter,
-                  'status': 'alfa',
-                  'waktu_masuk': null,
-                  'waktu_pulang': null,
-                  'keterangan': 'Belum diabsen.',
-                  'updated_by': null,
-                  'guru': null,
-                  'siswa': siswa,
-                }
-              : {...abs, 'siswa': siswa},
-        );
+      if (_selectedKelasId != null) {
+        query = query.eq('siswa.kelas_id', _selectedKelasId!);
       }
 
-      _absensiData = merged;
-      debugLog('Data gabungan: ${merged.length} siswa ditampilkan.');
-    } catch (e, st) {
-      debugLog('Error fetchAbsensi: $e\n$st');
+      // PERBAIKAN: Tambahkan .count(CountOption.exact) agar return type jadi PostgrestResponse
+      final response = await query
+          .order('siswa(nama)', ascending: true)
+          .range(from, to)
+          .count(CountOption.exact); 
+
+      // Sekarang properti .data dan .count sudah valid karena pakai CountOption
+      final dataList = response.data as List<dynamic>;
+      _totalRows = response.count; 
+
+      _absensiData = List<Map<String, dynamic>>.from(dataList);
+
+    } catch (e) {
+      debugPrint('Error fetch absensi: $e');
       _absensiData = [];
+      _totalRows = 0;
     } finally {
-      isLoading = false;
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  // --- Event: pilih tanggal ---
+  // --- Event Handlers ---
+
   Future<void> handleDatePick(BuildContext context) async {
-    final newDate = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
     );
-
-    if (newDate != null && newDate != _selectedDate) {
-      _selectedDate = newDate;
-      notifyListeners();
-      await fetchAbsensi();
+    if (picked != null && picked != _selectedDate) {
+      _selectedDate = picked;
+      _currentPage = 1; 
+      fetchAbsensi();
     }
   }
 
-  // --- Event: pilih kelas ---
-  Future<void> onKelasSelected(int? kelasId) async {
-    if (kelasId == _selectedKelasId) return;
-    _selectedKelasId = kelasId;
-    notifyListeners();
-    await fetchAbsensi();
+  void onKelasSelected(int? val) {
+    _selectedKelasId = val;
+    _currentPage = 1; 
+    fetchAbsensi();
   }
 
-  // --- CREATE Absensi ---
-  Future<void> createAbsensi({
-    required int siswaId,
-    required String status,
-    required String keterangan,
-    required TimeOfDay? waktuMasuk,
-    required TimeOfDay? waktuPulang,
-    required DateTime tanggal,
-  }) async {
-    debugLog('Membuat absensi baru untuk siswa $siswaId...');
-    final tgl = DateFormat('yyyy-MM-dd').format(tanggal);
-    final String? wMasuk = waktuMasuk != null
-        ? '${waktuMasuk.hour.toString().padLeft(2, '0')}:${waktuMasuk.minute.toString().padLeft(2, '0')}:00'
-        : null;
-    final String? wPulang = waktuPulang != null
-        ? '${waktuPulang.hour.toString().padLeft(2, '0')}:${waktuPulang.minute.toString().padLeft(2, '0')}:00'
-        : null;
-    final String? guruId = supabase.auth.currentUser?.id;
-
-    final insertData = {
-      'siswa_id': siswaId,
-      'tanggal': tgl,
-      'status': status,
-      'waktu_masuk': wMasuk,
-      'waktu_pulang': wPulang,
-      'keterangan': keterangan,
-      'updated_by': guruId,
-    };
-
-    try {
-      await supabase.from('absensi').insert(insertData);
-      await fetchAbsensi();
-      debugLog('Absensi baru berhasil dibuat.');
-    } catch (e) {
-      debugLog('Error createAbsensi: $e');
-      rethrow;
+  void updateLimit(int? val) {
+    if (val != null) {
+      _itemLimit = val;
+      _currentPage = 1; 
+      fetchAbsensi();
     }
   }
 
-  // --- UPDATE Absensi ---
-  Future<void> updateAbsensi({
-    required int absensiId,
-    required String status,
-    required String keterangan,
-    required TimeOfDay? waktuMasuk,
-    required TimeOfDay? waktuPulang,
-    required DateTime tanggal,
-  }) async {
-    debugLog('Update absensi ID $absensiId...');
-    final tgl = DateFormat('yyyy-MM-dd').format(tanggal);
-    final String? wMasuk = waktuMasuk != null
-        ? '${waktuMasuk.hour.toString().padLeft(2, '0')}:${waktuMasuk.minute.toString().padLeft(2, '0')}:00'
-        : null;
-    final String? wPulang = waktuPulang != null
-        ? '${waktuPulang.hour.toString().padLeft(2, '0')}:${waktuPulang.minute.toString().padLeft(2, '0')}:00'
-        : null;
-    final String? guruId = supabase.auth.currentUser?.id;
-
-    final updateData = {
-      'tanggal': tgl,
-      'status': status,
-      'waktu_masuk': wMasuk,
-      'waktu_pulang': wPulang,
-      'keterangan': keterangan,
-      'updated_at': DateTime.now().toIso8601String(),
-    };
-
-    try {
-      await supabase.from('absensi').update(updateData).eq('id', absensiId);
-      await fetchAbsensi();
-      debugLog('Absensi berhasil diperbarui.');
-    } catch (e) {
-      debugLog('Error updateAbsensi: $e');
-      rethrow;
+  void nextPage() {
+    if (_currentPage < totalPages) {
+      _currentPage++;
+      fetchAbsensi();
     }
   }
 
-  // =======================================================
-  // === BARU: FUNGSI UNTUK EXPORT PDF ===
-  // =======================================================
+  void prevPage() {
+    if (_currentPage > 1) {
+      _currentPage--;
+      fetchAbsensi();
+    }
+  }
 
-  /// Fungsi utama yang dipanggil dari UI untuk memulai export PDF (langsung download)
+  // --- EXPORT PDF ---
   Future<void> exportPdf(BuildContext context) async {
-    debugLog('Mulai export PDF...');
-
-    if (_absensiData.isEmpty) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('Tidak ada data untuk diexport'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      return;
-    }
-
-    // Tampilkan dialog loading
+    // 1. Loading
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
     try {
-      // 1. Dapatkan Nama Kelas yang dipilih
-      String namaKelas = 'Semua Kelas';
+      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      var query = supabase
+          .from('absensi')
+          .select('*, siswa!inner(id, nama, kelas_id)')
+          .eq('tanggal', dateStr);
+
       if (_selectedKelasId != null) {
-        final kelasMap = _daftarKelas.firstWhere(
-          (k) => k['id'] == _selectedKelasId,
-          orElse: () => {'nama_kelas': 'Semua Kelas'},
-        );
-        namaKelas = kelasMap['nama_kelas'];
+        query = query.eq('siswa.kelas_id', _selectedKelasId!);
       }
 
-      // 2. Format Tanggal
-      final String tgl = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final response = await query.order('siswa(nama)', ascending: true);
+      // Di sini kita tidak butuh count, jadi response langsung berupa List<dynamic>
+      final List<Map<String, dynamic>> fullData = List<Map<String, dynamic>>.from(response);
 
-      // 3. Buat dokumen PDF
-      final pdf = await _generatePdfDocument(namaKelas, tgl);
+      // PERBAIKAN 3: Cek mounted sebelum pakai Navigator/Scaffold
+      if (!context.mounted) return;
 
-      // 4. Simpan file sementara
-      final bytes = await pdf.save();
+      if (fullData.isEmpty) {
+        Navigator.pop(context); // Tutup loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak ada data untuk diexport')),
+        );
+        return;
+      }
 
-      // Tutup dialog loading
-      if (context.mounted) Navigator.of(context).pop();
+      String namaKelas = 'Semua Kelas';
+      if (_selectedKelasId != null) {
+        final kelas = _daftarKelas.firstWhere(
+          (k) => k['id'] == _selectedKelasId, 
+          orElse: () => {'nama_kelas': '-'}
+        );
+        namaKelas = kelas['nama_kelas'];
+      }
 
-      // 5. Gunakan Printing.sharePdf agar langsung bisa diunduh / dibuka
-      final fileName =
-          'Laporan_Absensi_${namaKelas.replaceAll(' ', '_')}_$tgl.pdf';
+      final pdfDoc = await _generatePdfDocument(fullData, namaKelas, dateStr);
+      final bytes = await pdfDoc.save();
 
+      if (!context.mounted) return;
+      Navigator.pop(context); // Tutup Loading
+      
+      final fileName = 'Laporan_Absensi_${namaKelas.replaceAll(' ', '_')}_$dateStr.pdf';
       await Printing.sharePdf(bytes: bytes, filename: fileName);
 
-      debugLog('Export PDF berhasil dan diunduh.');
-    } catch (e, st) {
-      debugLog('Error exportPdf: $e\n$st');
-      if (context.mounted) Navigator.of(context).pop();
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text('Gagal membuat PDF: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+    } catch (e) {
+      if (context.mounted) {
+         Navigator.pop(context); // Tutup Loading jika error
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(content: Text('Gagal export PDF: $e')),
+         );
+      }
+      debugPrint("Error export PDF: $e");
     }
   }
 
-  /// Helper untuk membangun dokumen PDF
-  Future<pw.Document> _generatePdfDocument(String namaKelas, String tgl) async {
+  Future<pw.Document> _generatePdfDocument(
+    List<Map<String, dynamic>> data, 
+    String namaKelas, 
+    String tgl
+  ) async {
     final doc = pw.Document();
-
-    // Muat font
     final font = await PdfGoogleFonts.robotoRegular();
     final boldFont = await PdfGoogleFonts.robotoBold();
 
-    // Siapkan data untuk tabel
-    final headers = [
-      'No',
-      'Nama Siswa',
-      'Status',
-      'Masuk',
-      'Pulang',
-      'Keterangan',
-    ];
+    final headers = ['No', 'Nama Siswa', 'Status', 'Masuk', 'Pulang', 'Keterangan'];
+    final rows = <List<String>>[];
 
-    final data = <List<String>>[];
-    for (var i = 0; i < _absensiData.length; i++) {
-      final row = _absensiData[i];
+    for (var i = 0; i < data.length; i++) {
+      final row = data[i];
       final siswa = row['siswa'] ?? {};
-
-      data.add([
-        (i + 1).toString(), // No
-        siswa['nama'] ?? '-', // Nama Siswa
-        (row['status'] ?? '-').toString().toUpperCase(), // Status
-        fmtTime(row['waktu_masuk']), // Masuk
-        fmtTime(row['waktu_pulang']), // Pulang
-        row['keterangan'] ?? '-', // Keterangan
+      rows.add([
+        (i + 1).toString(),
+        siswa['nama'] ?? '-',
+        (row['status'] ?? '-').toString().toUpperCase(),
+        fmtTime(row['waktu_masuk']),
+        fmtTime(row['waktu_pulang']),
+        row['keterangan'] ?? '-',
       ]);
     }
 
-    // Tambah halaman ke dokumen
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         theme: pw.ThemeData.withFont(base: font, bold: boldFont),
-        build: (pw.Context context) {
-          return [
-            // --- Header Dokumen ---
-            pw.Header(
-              level: 0,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'Laporan Absensi',
-                    style: pw.TextStyle(
-                      fontSize: 24,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.Text(
-                    schoolName, // Menggunakan nama sekolah dari controller
-                    style: const pw.TextStyle(fontSize: 18),
-                  ),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 20),
-
-            // --- Info Filter ---
-            pw.Text(
-              'Kelas: $namaKelas',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
-            pw.Text(
-              'Tanggal: $tgl',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 20),
-
-            // --- Tabel Data ---
-            pw.Table.fromTextArray(
-              headers: headers,
-              data: data,
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-              cellAlignments: {
-                0: pw.Alignment.center,
-                1: pw.Alignment.centerLeft,
-                2: pw.Alignment.center,
-                3: pw.Alignment.center,
-                4: pw.Alignment.center,
-                5: pw.Alignment.centerLeft,
-              },
-              border: pw.TableBorder.all(color: PdfColors.grey),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(0.5), // No
-                1: const pw.FlexColumnWidth(3), // Nama
-                2: const pw.FlexColumnWidth(2), // Status
-                3: const pw.FlexColumnWidth(1), // Masuk
-                4: const pw.FlexColumnWidth(1), // Pulang
-                5: const pw.FlexColumnWidth(2), // Keterangan
-              },
-            ),
-          ];
-        },
-        // --- Footer Dokumen ---
-        footer: (pw.Context context) {
-          return pw.Container(
-            alignment: pw.Alignment.centerRight,
-            margin: const pw.EdgeInsets.only(top: 10.0),
-            child: pw.Text(
-              'Dicetak pada: ${fmtDateTime(DateTime.now())} | Halaman ${context.pageNumber} dari ${context.pagesCount}',
-              style: pw.Theme.of(
-                context,
-              ).defaultTextStyle.copyWith(color: PdfColors.grey, fontSize: 10),
-            ),
-          );
-        },
+        build: (context) => [
+          pw.Header(
+            level: 0,
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Laporan Absensi', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(schoolName, style: const pw.TextStyle(fontSize: 14)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('Kelas: $namaKelas'),
+                    pw.Text('Tanggal: $tgl'),
+                  ],
+                )
+              ]
+            )
+          ),
+          pw.SizedBox(height: 20),
+          
+          // PERBAIKAN 4: Ganti pw.Table.fromTextArray jadi pw.TableHelper.fromTextArray
+          pw.TableHelper.fromTextArray(
+            headers: headers,
+            data: rows,
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blue700),
+            rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300))),
+            cellAlignments: {
+              0: pw.Alignment.center,
+              1: pw.Alignment.centerLeft,
+              2: pw.Alignment.center,
+              3: pw.Alignment.center,
+              4: pw.Alignment.center,
+              5: pw.Alignment.centerLeft,
+            },
+            columnWidths: {
+              0: const pw.FixedColumnWidth(30),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(60),
+              3: const pw.FixedColumnWidth(50),
+              4: const pw.FixedColumnWidth(50),
+              5: const pw.FlexColumnWidth(2),
+            }
+          ),
+        ],
+        footer: (context) => pw.Container(
+          alignment: pw.Alignment.centerRight,
+          margin: const pw.EdgeInsets.only(top: 10),
+          child: pw.Text(
+            'Halaman ${context.pageNumber} dari ${context.pagesCount}',
+            style: const pw.TextStyle(color: PdfColors.grey, fontSize: 10),
+          ),
+        ),
       ),
     );
 
     return doc;
   }
 
-  // --- Utility Format & Parse ---
-  DateTime? parseDateTime(dynamic value) {
-    if (value == null) return null;
+  // --- Helpers ---
+  String fmtDate(String? isoDate) {
+    if (isoDate == null) return '-';
     try {
-      if (value is DateTime) return value;
-      if (value is String && value.contains('T')) return DateTime.parse(value);
-      if (value is String && value.length == 10) {
-        return DateFormat('yyyy-MM-dd').parse(value);
-      }
-      return DateTime.parse(value.toString());
-    } catch (_) {
-      return null;
-    }
+      final dt = DateTime.parse(isoDate);
+      return DateFormat('dd/MM/yyyy').format(dt);
+    } catch (_) { return isoDate; }
   }
 
-  TimeOfDay? parseTimeOfDay(dynamic value) {
-    if (value == null) return null;
-    try {
-      final parts = value.toString().split(':');
-      if (parts.length >= 2) {
-        return TimeOfDay(
-          hour: int.parse(parts[0]),
-          minute: int.parse(parts[1]),
-        );
-      }
-      return null;
-    } catch (_) {
-      return null;
-    }
+  String fmtTime(dynamic timeStr) {
+    if (timeStr == null) return '-';
+    String str = timeStr.toString();
+    if (str.length >= 5) return str.substring(0, 5);
+    return str;
   }
-
-  String fmtDate(dynamic value) {
-    final dt = parseDateTime(value);
-    if (dt == null) return '-';
-    return DateFormat('dd-MM-yyyy', 'id_ID').format(dt);
-  }
-
-  String fmtDateTime(dynamic value) {
-    final dt = parseDateTime(value);
-    if (dt == null) return '-';
-    return DateFormat('dd-MM-yyyy HH:mm', 'id_ID').format(dt.toLocal());
-  }
-
-  String fmtTime(dynamic value) {
-    final tod = parseTimeOfDay(value);
-    if (tod == null) return '-';
-    return '${tod.hour.toString().padLeft(2, '0')}:${tod.minute.toString().padLeft(2, '0')}';
-  }
-
-  // Tambahkan ini di dalam class AbsensiController
-  int currentPage = 1;
-  int itemLimit = 10; // Default 10 data per halaman
-
-  // Getter untuk mengambil data sesuai halaman (Slice Data)
-  List<Map<String, dynamic>> get paginatedData {
-    int startIndex = (currentPage - 1) * itemLimit;
-    int endIndex = startIndex + itemLimit;
-
-    if (startIndex >= absensiData.length) {
-      return [];
-    }
-
-    return absensiData.sublist(
-      startIndex,
-      endIndex > absensiData.length ? absensiData.length : endIndex,
-    );
-  }
-
-  int get totalPages => (absensiData.length / itemLimit).ceil();
-
-  // Fungsi Ganti Limit
-  void updateLimit(int? limit) {
-    if (limit != null) {
-      itemLimit = limit;
-      currentPage = 1; // Reset ke halaman 1
-      notifyListeners();
-    }
-  }
-
-  // Fungsi Next Page
-  void nextPage() {
-    if (currentPage < totalPages) {
-      currentPage++;
-      notifyListeners();
-    }
-  }
-
-  // Fungsi Prev Page
-  void prevPage() {
-    if (currentPage > 1) {
-      currentPage--;
-      notifyListeners();
-    }
-  }
-
-  // PENTING: Tambahkan ini di dalam fungsi fetchAbsensi()
-  // agar saat filter berubah, halaman kembali ke 1
-  // fetchAbsensi() async {
-  //    ... logika fetch ...
-  //    currentPage = 1; // <--- Tambahkan reset ini
-  //    notifyListeners();
-  // }
 }
