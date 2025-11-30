@@ -246,7 +246,7 @@ class AbsensiController extends ChangeNotifier {
   // === BARU: FUNGSI UNTUK EXPORT PDF ===
   // =======================================================
 
-  /// Fungsi utama yang dipanggil dari UI untuk memulai export PDF
+  /// Fungsi utama yang dipanggil dari UI untuk memulai export PDF (langsung download)
   Future<void> exportPdf(BuildContext context) async {
     debugLog('Mulai export PDF...');
 
@@ -281,25 +281,27 @@ class AbsensiController extends ChangeNotifier {
       }
 
       // 2. Format Tanggal
-      final String tgl = DateFormat(
-        'EEEE, dd MMMM yyyy',
-        'id_ID',
-      ).format(_selectedDate);
+      final String tgl = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
       // 3. Buat dokumen PDF
       final pdf = await _generatePdfDocument(namaKelas, tgl);
 
-      // 4. Tutup dialog loading
+      // 4. Simpan file sementara
+      final bytes = await pdf.save();
+
+      // Tutup dialog loading
       if (context.mounted) Navigator.of(context).pop();
 
-      // 5. Tampilkan dialog Print/Simpan
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save(),
-      );
-      debugLog('Export PDF berhasil.');
+      // 5. Gunakan Printing.sharePdf agar langsung bisa diunduh / dibuka
+      final fileName =
+          'Laporan_Absensi_${namaKelas.replaceAll(' ', '_')}_$tgl.pdf';
+
+      await Printing.sharePdf(bytes: bytes, filename: fileName);
+
+      debugLog('Export PDF berhasil dan diunduh.');
     } catch (e, st) {
       debugLog('Error exportPdf: $e\n$st');
-      if (context.mounted) Navigator.of(context).pop(); // Tutup dialog loading
+      if (context.mounted) Navigator.of(context).pop();
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
@@ -476,4 +478,58 @@ class AbsensiController extends ChangeNotifier {
     if (tod == null) return '-';
     return '${tod.hour.toString().padLeft(2, '0')}:${tod.minute.toString().padLeft(2, '0')}';
   }
+
+  // Tambahkan ini di dalam class AbsensiController
+  int currentPage = 1;
+  int itemLimit = 10; // Default 10 data per halaman
+
+  // Getter untuk mengambil data sesuai halaman (Slice Data)
+  List<Map<String, dynamic>> get paginatedData {
+    int startIndex = (currentPage - 1) * itemLimit;
+    int endIndex = startIndex + itemLimit;
+
+    if (startIndex >= absensiData.length) {
+      return [];
+    }
+
+    return absensiData.sublist(
+      startIndex,
+      endIndex > absensiData.length ? absensiData.length : endIndex,
+    );
+  }
+
+  int get totalPages => (absensiData.length / itemLimit).ceil();
+
+  // Fungsi Ganti Limit
+  void updateLimit(int? limit) {
+    if (limit != null) {
+      itemLimit = limit;
+      currentPage = 1; // Reset ke halaman 1
+      notifyListeners();
+    }
+  }
+
+  // Fungsi Next Page
+  void nextPage() {
+    if (currentPage < totalPages) {
+      currentPage++;
+      notifyListeners();
+    }
+  }
+
+  // Fungsi Prev Page
+  void prevPage() {
+    if (currentPage > 1) {
+      currentPage--;
+      notifyListeners();
+    }
+  }
+
+  // PENTING: Tambahkan ini di dalam fungsi fetchAbsensi()
+  // agar saat filter berubah, halaman kembali ke 1
+  // fetchAbsensi() async {
+  //    ... logika fetch ...
+  //    currentPage = 1; // <--- Tambahkan reset ini
+  //    notifyListeners();
+  // }
 }

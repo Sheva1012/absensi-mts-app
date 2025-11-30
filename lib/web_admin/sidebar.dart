@@ -199,7 +199,7 @@ class _SidebarState extends State<Sidebar> {
                       duration: const Duration(milliseconds: 100),
                       opacity: _isCollapsed ? 0.0 : 1.0,
                       child: const Text(
-                        'Admin User',
+                        'Admin',
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: TextStyle(
