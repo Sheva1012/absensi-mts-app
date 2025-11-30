@@ -1,10 +1,8 @@
-// BARU: Import supabase dan intl (untuk format tanggal)
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
-// MODIFIKASI: Ubah dari StatelessWidget menjadi StatefulWidget
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -13,7 +11,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // BARU: Instance Supabase dan state untuk data
   final SupabaseClient supabase = Supabase.instance.client;
   late final RealtimeChannel _absensiChannel;
 
@@ -90,8 +87,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _fetchDashboardData();
             }
           },
-
-          // --- AKHIR PERBAIKAN ---
         )
         .subscribe();
   }

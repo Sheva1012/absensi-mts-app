@@ -31,15 +31,15 @@ class PageAbsensi extends StatelessWidget {
                       _AbsensiHeader(schoolName: controller.schoolName),
                       const SizedBox(height: 24),
 
-                      // --- FILTER SECTION (Limit + Date + Class) ---
+                      // --- FILTER SECTION ---
                       _buildFilterSection(context, controller),
 
                       const SizedBox(height: 24),
 
                       controller.isLoading
-                          ? const Center(
-                              child: Padding(
-                                padding: EdgeInsets.only(top: 60),
+                          ? const SizedBox(
+                              height: 300,
+                              child: Center(
                                 child: CircularProgressIndicator(),
                               ),
                             )
@@ -59,7 +59,7 @@ class PageAbsensi extends StatelessWidget {
                   );
                 }
               },
-              child: const Icon(Icons.refresh),
+              child: const Icon(Icons.refresh, color: Colors.white),
             ),
           );
         },
@@ -67,7 +67,6 @@ class PageAbsensi extends StatelessWidget {
     );
   }
 
-  // Widget Filter yang digabung (Show Entries + Date + Class)
   Widget _buildFilterSection(
     BuildContext context,
     AbsensiController controller,
@@ -76,22 +75,12 @@ class PageAbsensi extends StatelessWidget {
       children: [
         Row(
           children: [
-            // 1. Dropdown Limit (Show Entries)
+            // 1. Dropdown Limit
             Container(
               width: 80,
-              height: 50, // Samakan tinggi
+              height: 50,
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
+              decoration: _boxDecoration(),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<int>(
                   value: controller.itemLimit,
@@ -132,6 +121,18 @@ class PageAbsensi extends StatelessWidget {
       ],
     );
   }
+
+  BoxDecoration _boxDecoration() => BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      );
 }
 
 // ===========================================================
@@ -186,7 +187,7 @@ class _AbsensiHeader extends StatelessWidget {
 }
 
 // ===========================================================
-// 3. FILTER TANGGAL
+// 3. WIDGETS PENDUKUNG (Picker & Dropdown)
 // ===========================================================
 class _AbsensiDatePicker extends StatelessWidget {
   final AbsensiController controller;
@@ -195,7 +196,7 @@ class _AbsensiDatePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 50, // Tinggi disesuaikan
+      height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: _box(),
       child: InkWell(
@@ -207,10 +208,8 @@ class _AbsensiDatePicker extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                DateFormat(
-                  'dd MMM yyyy',
-                  'id_ID',
-                ).format(controller.selectedDate),
+                DateFormat('EEEE, dd MMM yyyy', 'id_ID')
+                    .format(controller.selectedDate),
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
@@ -226,21 +225,18 @@ class _AbsensiDatePicker extends StatelessWidget {
   }
 
   BoxDecoration _box() => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(12),
-    boxShadow: [
-      BoxShadow(
-        color: Colors.grey.withOpacity(0.08),
-        blurRadius: 10,
-        offset: const Offset(0, 2),
-      ),
-    ],
-  );
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      );
 }
 
-// ===========================================================
-// 4. FILTER KELAS
-// ===========================================================
 class _KelasFilterDropdown extends StatelessWidget {
   final AbsensiController controller;
   const _KelasFilterDropdown({required this.controller});
@@ -248,7 +244,7 @@ class _KelasFilterDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 50, // Tinggi disesuaikan
+      height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: _box(),
       child: controller.isKelasLoading
@@ -259,41 +255,42 @@ class _KelasFilterDropdown extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             )
-          : DropdownButton<int?>(
-              value: controller.selectedKelasId,
-              isExpanded: true,
-              underline: const SizedBox(),
-              icon: const Icon(Icons.arrow_drop_down),
-              hint: const Text("Kelas", style: TextStyle(fontSize: 14)),
-              items: controller.daftarKelas.map((kelas) {
-                return DropdownMenuItem<int?>(
-                  value: kelas['id'],
-                  child: Text(
-                    kelas['nama_kelas'],
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                );
-              }).toList(),
-              onChanged: (val) => controller.onKelasSelected(val),
+          : DropdownButtonHideUnderline(
+              child: DropdownButton<int?>(
+                value: controller.selectedKelasId,
+                isExpanded: true,
+                icon: const Icon(Icons.arrow_drop_down),
+                hint: const Text("Semua Kelas", style: TextStyle(fontSize: 14)),
+                items: controller.daftarKelas.map((kelas) {
+                  return DropdownMenuItem<int?>(
+                    value: kelas['id'],
+                    child: Text(
+                      kelas['nama_kelas'],
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) => controller.onKelasSelected(val),
+              ),
             ),
     );
   }
 
   BoxDecoration _box() => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(12),
-    boxShadow: [
-      BoxShadow(
-        color: Colors.grey.withOpacity(0.08),
-        blurRadius: 10,
-        offset: const Offset(0, 2),
-      ),
-    ],
-  );
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      );
 }
 
 // ===========================================================
-// 5. CONTENT (TABLE + PAGINATION)
+// 4. CONTENT (TABLE + PAGINATION)
 // ===========================================================
 class _AbsensiContent extends StatelessWidget {
   final AbsensiController controller;
@@ -312,23 +309,20 @@ class _AbsensiContent extends StatelessWidget {
         const SizedBox(height: 16),
         _AbsensiTable(controller: controller),
         const SizedBox(height: 16),
-        _buildPagination(controller), // Widget Pagination Baru
-        const SizedBox(height: 50), // Padding bawah aman
+        _buildPagination(controller),
+        const SizedBox(height: 50),
       ],
     );
   }
 
-  // Widget Pagination Control
   Widget _buildPagination(AbsensiController controller) {
-    final int totalData = controller.absensiData.length;
+    // UPDATED: Menggunakan controller.totalRows (bukan length list)
+    final int totalData = controller.totalRows;
     final int current = controller.currentPage;
     final int limit = controller.itemLimit;
 
-    // Hitung index display "1 - 10 dari 50"
-    final int startItem = ((current - 1) * limit) + 1;
-    final int endItem = (current * limit) > totalData
-        ? totalData
-        : (current * limit);
+    final int startItem = totalData == 0 ? 0 : ((current - 1) * limit) + 1;
+    final int endItem = (current * limit) > totalData ? totalData : (current * limit);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
@@ -341,8 +335,6 @@ class _AbsensiContent extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 16),
-
-        // Prev Button
         Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -355,10 +347,7 @@ class _AbsensiContent extends StatelessWidget {
             tooltip: "Sebelumnya",
           ),
         ),
-
         const SizedBox(width: 8),
-
-        // Page Indicator
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
@@ -381,10 +370,7 @@ class _AbsensiContent extends StatelessWidget {
             ),
           ),
         ),
-
         const SizedBox(width: 8),
-
-        // Next Button
         Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -393,9 +379,8 @@ class _AbsensiContent extends StatelessWidget {
           ),
           child: IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed: current < controller.totalPages
-                ? controller.nextPage
-                : null,
+            // UPDATED: Menggunakan controller.totalPages
+            onPressed: current < controller.totalPages ? controller.nextPage : null,
             tooltip: "Selanjutnya",
           ),
         ),
@@ -405,55 +390,7 @@ class _AbsensiContent extends StatelessWidget {
 }
 
 // ===========================================================
-// 6. EMPTY STATE
-// ===========================================================
-class _EmptyStateView extends StatelessWidget {
-  final AbsensiController controller;
-  const _EmptyStateView({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.only(top: 80),
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.info_outline, size: 48, color: Colors.blueGrey),
-            const SizedBox(height: 16),
-            const Text(
-              'Tidak Ada Data',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              controller.selectedKelasId == null
-                  ? 'Belum ada data absensi pada tanggal ini.'
-                  : 'Tidak ditemukan data absensi untuk kelas ini.',
-              style: const TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ===========================================================
-// TOMBOL EXPORT
+// 5. TOMBOL EXPORT PDF (UPDATED)
 // ===========================================================
 class _ExportPdfButton extends StatelessWidget {
   final AbsensiController controller;
@@ -470,19 +407,14 @@ class _ExportPdfButton extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       ),
-      onPressed: () {
-        // Pastikan controller memiliki method exportPdf
-        // controller.exportPdf(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Fitur Export PDF akan segera hadir")),
-        );
-      },
+      // UPDATED: Memanggil fungsi exportPdf dari controller
+      onPressed: () => controller.exportPdf(context),
     );
   }
 }
 
 // ===========================================================
-// 7. DATA TABLE (PAGINATED)
+// 6. TABLE & ROWS
 // ===========================================================
 class _AbsensiTable extends StatelessWidget {
   final AbsensiController controller;
@@ -508,14 +440,11 @@ class _AbsensiTable extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final double availableWidth = constraints.maxWidth;
+          // Gunakan data langsung karena sudah dipaginate oleh Controller
+          final List<Map<String, dynamic>> displayData = controller.absensiData;
 
-          // Gunakan getter paginatedData yang ada di controller
-          final List<Map<String, dynamic>> displayData =
-              controller.paginatedData;
-
-          // Hitung offset nomor urut berdasarkan halaman
-          final int startNumber =
-              (controller.currentPage - 1) * controller.itemLimit;
+          // Hitung offset nomor urut
+          final int startNumber = (controller.currentPage - 1) * controller.itemLimit;
 
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -525,112 +454,46 @@ class _AbsensiTable extends StatelessWidget {
                 columnSpacing: 16,
                 headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
                 columns: const [
-                  DataColumn(
-                    label: Text(
-                      'No',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ), // Tambah kolom No
-                  DataColumn(
-                    label: SizedBox(
-                      width: 160,
-                      child: Text(
-                        'Nama Siswa',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                  DataColumn(
-                    label: SizedBox(
-                      width: 100,
-                      child: Center(
-                        child: Text(
-                          'Tanggal',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ),
-                  DataColumn(
-                    label: SizedBox(
-                      width: 100,
-                      child: Center(
-                        child: Text(
-                          'Status',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ),
-                  DataColumn(
-                    label: SizedBox(
-                      width: 80,
-                      child: Center(
-                        child: Text(
-                          'Masuk',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ),
-                  DataColumn(
-                    label: SizedBox(
-                      width: 80,
-                      child: Center(
-                        child: Text(
-                          'Pulang',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ),
-                  DataColumn(
-                    label: SizedBox(
-                      width: 150,
-                      child: Center(
-                        child: Text(
-                          'Keterangan',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ),
+                  DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: SizedBox(width: 160, child: Text('Nama Siswa', style: TextStyle(fontWeight: FontWeight.bold)))),
+                  DataColumn(label: SizedBox(width: 80, child: Center(child: Text('Tanggal', style: TextStyle(fontWeight: FontWeight.bold))))),
+                  DataColumn(label: SizedBox(width: 100, child: Center(child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))))),
+                  DataColumn(label: SizedBox(width: 80, child: Center(child: Text('Masuk', style: TextStyle(fontWeight: FontWeight.bold))))),
+                  DataColumn(label: SizedBox(width: 80, child: Center(child: Text('Pulang', style: TextStyle(fontWeight: FontWeight.bold))))),
+                  DataColumn(label: SizedBox(width: 150, child: Center(child: Text('Keterangan', style: TextStyle(fontWeight: FontWeight.bold))))),
                 ],
                 rows: List.generate(displayData.length, (index) {
                   final a = displayData[index];
                   final siswa = a['siswa'] ?? {};
-                  final nama = siswa['nama'] ?? '-';
+                  final nama = siswa['nama'] ?? 'Siswa #${siswa['id']}';
                   final tgl = controller.fmtDate(a['tanggal']);
-                  final status = a['status'] ?? '-';
+                  final status = a['status'] ?? 'alfa';
                   final masuk = controller.fmtTime(a['waktu_masuk']);
                   final pulang = controller.fmtTime(a['waktu_pulang']);
-                  final ket = a['keterangan'] ?? '-';
+                  
+                  // Keterangan Logic
+                  String ket = a['keterangan'] ?? '-';
+                  if (status == 'alfa' && ket == '-') ket = 'Tanpa Keterangan';
+
                   final color = _statusColor(status);
 
                   return DataRow(
                     cells: [
-                      DataCell(
-                        Text("${startNumber + index + 1}"),
-                      ), // Nomor urut
-                      DataCell(SizedBox(width: 160, child: Text(nama))),
-                      DataCell(
-                        SizedBox(width: 100, child: Center(child: Text(tgl))),
-                      ),
+                      DataCell(Text("${startNumber + index + 1}")),
+                      DataCell(SizedBox(width: 160, child: Text(nama, style: const TextStyle(fontWeight: FontWeight.w500)))),
+                      DataCell(SizedBox(width: 80, child: Center(child: Text(tgl)))),
                       DataCell(
                         SizedBox(
                           width: 100,
                           child: Center(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 color: color.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                status.toUpperCase(),
+                                status.toString().toUpperCase(),
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: color,
@@ -641,23 +504,9 @@ class _AbsensiTable extends StatelessWidget {
                           ),
                         ),
                       ),
-                      DataCell(
-                        SizedBox(width: 80, child: Center(child: Text(masuk))),
-                      ),
-                      DataCell(
-                        SizedBox(
-                          width: 80,
-                          child: Center(child: Text(pulang)),
-                        ),
-                      ),
-                      DataCell(
-                        SizedBox(
-                          width: 150,
-                          child: Center(
-                            child: Text(ket, overflow: TextOverflow.ellipsis),
-                          ),
-                        ),
-                      ),
+                      DataCell(SizedBox(width: 80, child: Center(child: Text(masuk)))),
+                      DataCell(SizedBox(width: 80, child: Center(child: Text(pulang)))),
+                      DataCell(SizedBox(width: 150, child: Text(ket, overflow: TextOverflow.ellipsis, maxLines: 1))),
                     ],
                   );
                 }),
@@ -672,17 +521,63 @@ class _AbsensiTable extends StatelessWidget {
   static Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'hadir':
-      case 'pulang':
         return Colors.green.shade700;
+      case 'pulang':
+        return Colors.blue.shade700;
       case 'terlambat':
-        return Colors.purple.shade700;
+        return Colors.orange.shade800;
       case 'sakit':
       case 'izin':
-        return Colors.orange.shade700;
+        return Colors.purple.shade700;
       case 'alfa':
         return Colors.red.shade700;
       default:
-        return Colors.black87;
+        return Colors.grey.shade700;
     }
+  }
+}
+
+class _EmptyStateView extends StatelessWidget {
+  final AbsensiController controller;
+  const _EmptyStateView({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.only(top: 80),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.folder_off_outlined, size: 60, color: Colors.blueGrey),
+            const SizedBox(height: 16),
+            const Text(
+              'Tidak Ada Data Absensi',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              controller.selectedKelasId == null
+                  ? 'Belum ada data generated untuk tanggal ini.\nPastikan Cron Job berjalan atau tambah siswa.'
+                  : 'Tidak ditemukan siswa atau absensi di kelas ini.',
+              style: const TextStyle(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
