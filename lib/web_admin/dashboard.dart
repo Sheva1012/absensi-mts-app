@@ -1,10 +1,8 @@
-// BARU: Import supabase dan intl (untuk format tanggal)
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
-// MODIFIKASI: Ubah dari StatelessWidget menjadi StatefulWidget
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -13,7 +11,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // BARU: Instance Supabase dan state untuk data
   final SupabaseClient supabase = Supabase.instance.client;
   late final RealtimeChannel _absensiChannel;
 
@@ -98,8 +95,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _fetchDashboardData();
             }
           },
-
-          // --- AKHIR PERBAIKAN ---
         )
         .subscribe();
   }
@@ -231,7 +226,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   const _AppHeader(), // Header tetap statis
                   const SizedBox(height: 20),
-                  const _WelcomeCard(), // Welcome card tetap statis
                   const SizedBox(height: 20),
                   // MODIFIKASI: Kirim data dinamis ke _QuickStats
                   _QuickStats(
@@ -393,71 +387,6 @@ class _ProfileSection extends StatelessWidget {
   }
 }
 
-// --- WELCOME CARD ---
-class _WelcomeCard extends StatelessWidget {
-  const _WelcomeCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(30),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF42A5F5), Color(0xFF1E88E5)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF42A5F5).withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Selamat Datang, Admin!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Sistem Manajemen Absensi MTs Sunan Gunung Jati - Pantau kehadiran siswa secara real-time dan kelola data dengan mudah.',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 30),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.analytics_outlined,
-              size: 60,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // --- STATS CEPAT (QUICK STATS) ---
 class _QuickStats extends StatelessWidget {
