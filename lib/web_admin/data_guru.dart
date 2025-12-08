@@ -4,6 +4,7 @@ import 'package:multi_select_flutter/multi_select_flutter.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 
+// --- MODEL KELAS ---
 class Kelas {
   final String id;
   final String nama;
@@ -26,6 +27,7 @@ class Kelas {
   int get hashCode => id.hashCode;
 }
 
+// --- PAGE GURU ---
 class PageGuru extends StatefulWidget {
   final String schoolName;
   const PageGuru({super.key, required this.schoolName});
@@ -86,7 +88,8 @@ class _PageGuruState extends State<PageGuru> {
   void _showFormDialog({Map<String, dynamic>? guru}) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
         title: Row(
           children: [
             Icon(
@@ -98,29 +101,86 @@ class _PageGuruState extends State<PageGuru> {
           ],
         ),
         content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.4,
+          width: MediaQuery.of(context).size.width * 0.5,
           child: SingleChildScrollView(
             child: FormGuru(
               initialData: guru,
               onSave: (data) async {
                 try {
                   if (guru == null) {
-                    await supabase.from('guru').insert(data);
-                    _showSuccessSnackbar(
-                      'Data guru ${data['nama']} berhasil ditambahkan',
+                    // --- TAMBAH DATA (CREATE) ---
+
+                    // 1. Ambil password dari form
+                    final String password = data['password'];
+
+                    // 2. Buat Client Sementara (Tanpa Persistence)
+                    // PENTING: Ganti URL dan KEY dengan milik Anda
+                    final tempClient = SupabaseClient(
+                      'https://eachbhkjgadrpmrpbwat.supabase.co',
+                      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2hiaGtqZ2FkcnBtcnBid2F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2Njk1MDEsImV4cCI6MjA3NTI0NTUwMX0.gZPdf88neU4yuLdKkUlTKNadpsRArxUp2IlQHk-XCrI',
+                      authOptions: const FlutterAuthClientOptions(
+                        authFlowType: AuthFlowType
+                            .implicit, // Mencegah error asyncStorage
+                      ),
                     );
+
+                    // 3. Buat Akun Login dengan Password dari Form
+                    final authResponse = await tempClient.auth.signUp(
+                      email: data['email'],
+                      password: password, // <-- GUNAKAN PASSWORD DARI INPUT
+                    );
+
+                    if (authResponse.user == null) {
+                      throw "Gagal membuat akun login.";
+                    }
+
+                    final newUserId = authResponse.user!.id;
+
+                    // 4. Siapkan data untuk tabel 'guru'
+                    final guruDataToInsert = Map<String, dynamic>.from(data);
+                    guruDataToInsert['id'] = newUserId;
+
+                    // Bersihkan data yang tidak ada di kolom tabel guru
+                    guruDataToInsert.remove(
+                      'password',
+                    ); // Hapus field password (jangan simpan plain text di DB!)
+                    if (guruDataToInsert['avatar_url'] == null) {
+                      guruDataToInsert.remove('avatar_url');
+                    }
+
+                    // 5. Insert ke tabel 'guru' (Pakai client utama)
+                    await supabase.from('guru').insert(guruDataToInsert);
+
+                    _showSuccessSnackbar(
+                      'Guru ${data['nama']} berhasil ditambahkan.',
+                    );
+
+                    tempClient.dispose();
                   } else {
+                    // --- EDIT DATA (UPDATE) ---
+                    // Tidak mengupdate password di sini
                     final id = guru['id'];
+
+                    // Hapus password dari data update jika tidak sengaja terbawa
+                    data.remove('password');
+
                     await supabase.from('guru').update(data).eq('id', id);
+
                     _showSuccessSnackbar(
                       'Data guru ${data['nama']} berhasil diupdate',
                     );
                   }
-                  if (mounted) Navigator.of(context).pop();
+
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+
                   fetchGuru();
                 } catch (e) {
-                  // Tidak perlu pop di sini karena error akan ditangani di dalam form
-                  _showErrorSnackbar("Terjadi kesalahan: $e");
+                  if (e.toString().contains("User already registered")) {
+                    throw "Email sudah terdaftar sebagai pengguna lain.";
+                  }
+                  throw e.toString();
                 }
               },
             ),
@@ -133,12 +193,12 @@ class _PageGuruState extends State<PageGuru> {
   void _showDeleteDialog(Map<String, dynamic> guru) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Hapus Data Guru'),
         content: Text('Yakin ingin menghapus data guru ${guru['nama']}?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Batal'),
           ),
           ElevatedButton(
@@ -150,19 +210,23 @@ class _PageGuruState extends State<PageGuru> {
 
                 final avatarUrl = guru['avatar_url'] as String?;
                 if (avatarUrl != null && avatarUrl.isNotEmpty) {
-                  final fileName = avatarUrl.split('/').last;
-                  await supabase.storage.from('avatars').remove([
-                    'public/$fileName',
-                  ]);
+                  try {
+                    // Coba hapus gambar, tapi jangan gagalkan proses jika file tidak ketemu
+                    final fileName = avatarUrl.split('/').last;
+                    await supabase.storage.from('avatars').remove([
+                      'public/$fileName',
+                    ]);
+                  } catch (_) {}
                 }
 
-                if (mounted) Navigator.of(context).pop();
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+
                 _showSuccessSnackbar(
                   'Data guru ${guru['nama']} berhasil dihapus',
                 );
                 fetchGuru();
               } catch (e) {
-                if (mounted) Navigator.of(context).pop();
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
                 _showErrorSnackbar("Gagal menghapus data: $e");
               }
             },
@@ -261,7 +325,6 @@ class _PageGuruState extends State<PageGuru> {
   }
 
   Widget _buildTable() {
-    // Cek jika data kosong
     if (guruData.isEmpty) {
       return const Center(
         child: Padding(
@@ -271,11 +334,9 @@ class _PageGuruState extends State<PageGuru> {
       );
     }
 
-    // Controller untuk scroll horizontal
     final ScrollController _horizontalController = ScrollController();
 
     return Container(
-      // Hapus width: double.infinity agar menyesuaikan parent (LayoutBuilder)
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -288,10 +349,8 @@ class _PageGuruState extends State<PageGuru> {
           ),
         ],
       ),
-      // Gunakan LayoutBuilder agar responsif terhadap perubahan lebar (sidebar)
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Lebar minimum tabel mengikuti lebar container yang tersedia
           final double minTableWidth = constraints.maxWidth;
 
           return Scrollbar(
@@ -303,14 +362,11 @@ class _PageGuruState extends State<PageGuru> {
               controller: _horizontalController,
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
-                // KUNCI: minWidth diset ke constraints.maxWidth
-                // Ini membuat tabel "full width" jika konten sedikit,
-                // tapi tetap bisa di-scroll jika konten melebar.
                 constraints: BoxConstraints(minWidth: minTableWidth),
                 child: DataTable(
                   columnSpacing: 24,
                   headingRowHeight: 56,
-                  dataRowHeight: 64,
+                  dataRowHeight: 80, // Sedikit dipertinggi agar avatar muat
                   headingRowColor: MaterialStateProperty.all(
                     Colors.blue.shade50,
                   ),
@@ -367,7 +423,7 @@ class _PageGuruState extends State<PageGuru> {
                   rows: List.generate(guruData.length, (i) {
                     final guru = guruData[i];
 
-                    // Logika memproses kelas diampu
+                    // Logic display kelas
                     final dynamic data = guru['kelas_diampu'];
                     List<String> semuaKelas = [];
                     if (data is Map<String, dynamic>) {
@@ -391,7 +447,16 @@ class _PageGuruState extends State<PageGuru> {
                             child: Center(child: Text(guru['role'] ?? '-')),
                           ),
                         ),
-                        DataCell(Text(kelasDiampuText)),
+                        DataCell(
+                          SizedBox(
+                            width: 200,
+                            child: Text(
+                              kelasDiampuText,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 2,
+                            ),
+                          ),
+                        ),
                         DataCell(
                           SizedBox(
                             width: 80,
@@ -469,9 +534,11 @@ Widget _buildActionButton(
   );
 }
 
+// --- FORM GURU ---
 class FormGuru extends StatefulWidget {
   final Map<String, dynamic>? initialData;
-  final Function(Map<String, dynamic>) onSave;
+  // PERBAIKAN PENTING: Mengubah tipe Function menjadi Future<void>
+  final Future<void> Function(Map<String, dynamic>) onSave;
 
   const FormGuru({super.key, this.initialData, required this.onSave});
 
@@ -482,14 +549,19 @@ class FormGuru extends StatefulWidget {
 class _FormGuruState extends State<FormGuru> {
   final _formKey = GlobalKey<FormState>();
   final SupabaseClient supabase = Supabase.instance.client;
+
   late final TextEditingController _namaController;
   late final TextEditingController _emailController;
+  // BARU: Controller untuk password
+  late final TextEditingController _passwordController;
 
   String? _selectedRole;
   List<Kelas> _selectedKelas = [];
   bool _isUploading = false;
 
-  // PERUBAHAN: State untuk menangani gambar
+  // BARU: State untuk melihat/menyembunyikan password
+  bool _obscurePassword = true;
+
   Uint8List? _avatarBytes;
   String? _existingAvatarUrl;
 
@@ -512,7 +584,11 @@ class _FormGuruState extends State<FormGuru> {
     final data = widget.initialData;
     _namaController = TextEditingController(text: data?['nama'] ?? '');
     _emailController = TextEditingController(text: data?['email'] ?? '');
-    _selectedRole = data?['role'] ?? 'guru';
+    // Password kosong saat awal
+    _passwordController = TextEditingController();
+
+    final initialRole = data?['role'];
+    _selectedRole = _roleOptions.contains(initialRole) ? initialRole : 'guru';
     _existingAvatarUrl = data?['avatar_url'];
 
     final dynamic kelasData = data?['kelas_diampu'];
@@ -521,8 +597,8 @@ class _FormGuruState extends State<FormGuru> {
       List<Kelas> initialKelas = [];
       kelasDiampuMap.forEach((key, value) {
         if (value is List) {
-          for (final String kelasNama in value.cast<String>()) {
-            if (_kelasLookup.containsKey(kelasNama)) {
+          for (final dynamic kelasNama in value) {
+            if (kelasNama is String && _kelasLookup.containsKey(kelasNama)) {
               initialKelas.add(_kelasLookup[kelasNama]!);
             }
           }
@@ -536,6 +612,7 @@ class _FormGuruState extends State<FormGuru> {
   void dispose() {
     _namaController.dispose();
     _emailController.dispose();
+    _passwordController.dispose(); // Jangan lupa dispose
     super.dispose();
   }
 
@@ -551,29 +628,26 @@ class _FormGuruState extends State<FormGuru> {
   }
 
   Future<void> _submitForm() async {
-    if (_isUploading) return; // Mencegah double-submit
+    if (_isUploading) return;
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isUploading = true;
-      });
+      setState(() => _isUploading = true);
 
       try {
         String? avatarUrl = _existingAvatarUrl;
 
-        // Jika ada gambar baru yang dipilih, unggah ke storage
         if (_avatarBytes != null) {
-          final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-          // Simpan di dalam folder public agar URLnya bisa diakses
+          final fileName =
+              'avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
           final filePath = 'public/$fileName';
 
           await supabase.storage
-              .from('avatars') // Nama bucket Anda
+              .from('avatars')
               .uploadBinary(
                 filePath,
                 _avatarBytes!,
                 fileOptions: const FileOptions(
-                  cacheControl: '3600', // Cache 1 jam
-                  upsert: false,
+                  cacheControl: '3600',
+                  upsert: true,
                 ),
               );
 
@@ -588,7 +662,6 @@ class _FormGuruState extends State<FormGuru> {
           }
           groupedKelas[tingkat]!.add(kelas.nama);
         }
-
         groupedKelas.forEach((key, value) => value.sort());
 
         final dataToSave = {
@@ -597,23 +670,23 @@ class _FormGuruState extends State<FormGuru> {
           'role': _selectedRole,
           'kelas_diampu': groupedKelas,
           'avatar_url': avatarUrl,
+          // BARU: Sertakan password di data yang dikirim
+          'password': _passwordController.text,
         };
-        widget.onSave(dataToSave);
+
+        await widget.onSave(dataToSave);
       } catch (e) {
-        // Tampilkan error jika upload gagal
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Gagal mengunggah foto: $e"),
+              content: Text("Terjadi kesalahan: $e"),
               backgroundColor: Colors.red,
             ),
           );
         }
       } finally {
         if (mounted) {
-          setState(() {
-            _isUploading = false;
-          });
+          setState(() => _isUploading = false);
         }
       }
     }
@@ -621,12 +694,14 @@ class _FormGuruState extends State<FormGuru> {
 
   @override
   Widget build(BuildContext context) {
+    // Cek apakah ini mode Edit atau Tambah Baru
+    final isEditing = widget.initialData != null;
+
     return Form(
       key: _formKey,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // PERUBAHAN: Widget untuk memilih dan menampilkan avatar
           _buildAvatarPicker(),
           const SizedBox(height: 16),
           TextFormField(
@@ -642,10 +717,15 @@ class _FormGuruState extends State<FormGuru> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _emailController,
-            decoration: const InputDecoration(
+            // Jika sedang edit, email biasanya tidak boleh diganti agar tidak merusak Auth
+            readOnly: isEditing,
+            decoration: InputDecoration(
               labelText: 'Email',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.email),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.email),
+              // Beri warna abu-abu jika readOnly
+              fillColor: isEditing ? Colors.grey.shade200 : null,
+              filled: isEditing,
             ),
             validator: (v) {
               if (v == null || v.isEmpty) return 'Email harus diisi';
@@ -653,6 +733,36 @@ class _FormGuruState extends State<FormGuru> {
               return null;
             },
           ),
+
+          // BARU: Kolom Password (Hanya muncul saat Tambah Baru)
+          if (!isEditing) ...[
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _passwordController,
+              obscureText: _obscurePassword, // Agar teks jadi bintang/titik
+              decoration: InputDecoration(
+                labelText: 'Password Login App',
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.lock),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                ),
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Password harus diisi';
+                if (v.length < 6) return 'Password minimal 6 karakter';
+                return null;
+              },
+            ),
+          ],
+
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             value: _selectedRole,
@@ -679,16 +789,13 @@ class _FormGuruState extends State<FormGuru> {
             title: const Text("Kelas Diampu"),
             headerColor: Colors.blue.withOpacity(0.1),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade400, width: 1.8),
+              border: Border.all(color: Colors.grey.shade400, width: 1.0),
               borderRadius: BorderRadius.circular(4),
             ),
-            selectedChipColor: Colors.blue.withOpacity(0.5),
+            selectedChipColor: Colors.blue.withOpacity(0.2),
             selectedTextStyle: const TextStyle(
-              color: Colors.black,
+              color: Colors.blue,
               fontWeight: FontWeight.bold,
-            ),
-            chipShape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
             ),
             onTap: (values) {
               _selectedKelas = values.whereType<Kelas>().toList();
@@ -704,12 +811,15 @@ class _FormGuruState extends State<FormGuru> {
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: _submitForm,
+                onPressed: _isUploading ? null : _submitForm,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                 ),
-                // Menampilkan loading indicator saat upload
                 child: _isUploading
                     ? const SizedBox(
                         width: 20,
@@ -728,7 +838,6 @@ class _FormGuruState extends State<FormGuru> {
     );
   }
 
-  // BARU: Widget untuk UI pemilihan avatar
   Widget _buildAvatarPicker() {
     ImageProvider? imageProvider;
     if (_avatarBytes != null) {
@@ -741,12 +850,12 @@ class _FormGuruState extends State<FormGuru> {
       children: [
         CircleAvatar(
           radius: 50,
+          backgroundColor: Colors.grey.shade200,
           backgroundImage: imageProvider,
           child: imageProvider == null
-              ? const Icon(Icons.person, size: 50)
+              ? const Icon(Icons.person, size: 50, color: Colors.grey)
               : null,
         ),
-        const SizedBox(height: 8),
         TextButton.icon(
           icon: const Icon(Icons.upload_file),
           label: const Text('Ubah Foto'),
