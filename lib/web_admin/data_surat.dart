@@ -106,13 +106,16 @@ class _DataSuratPageState extends State<DataSuratPage> {
     _startDateCtrl.text = selectedStartDate == null
         ? ''
         : DateFormat('dd MMM yyyy').format(selectedStartDate!);
-    _endDateCtrl.text =
-        selectedEndDate == null ? '' : DateFormat('dd MMM yyyy').format(selectedEndDate!);
+    _endDateCtrl.text = selectedEndDate == null
+        ? ''
+        : DateFormat('dd MMM yyyy').format(selectedEndDate!);
   }
 
   void _showSnackbar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Extract object path dari PUBLIC URL:
@@ -141,10 +144,16 @@ class _DataSuratPageState extends State<DataSuratPage> {
       var query = supabase.from('surat').select('*, siswa(nama)');
 
       if (selectedStartDate != null) {
-        query = query.gte('tanggal', DateFormat('yyyy-MM-dd').format(selectedStartDate!));
+        query = query.gte(
+          'tanggal',
+          DateFormat('yyyy-MM-dd').format(selectedStartDate!),
+        );
       }
       if (selectedEndDate != null) {
-        query = query.lte('tanggal', DateFormat('yyyy-MM-dd').format(selectedEndDate!));
+        query = query.lte(
+          'tanggal',
+          DateFormat('yyyy-MM-dd').format(selectedEndDate!),
+        );
       }
       if (selectedJenisSurat != null && selectedJenisSurat!.isNotEmpty) {
         query = query.eq('jenis', selectedJenisSurat!);
@@ -201,7 +210,8 @@ class _DataSuratPageState extends State<DataSuratPage> {
         if (url.isEmpty) continue;
 
         final lower = url.toLowerCase();
-        final isImage = lower.endsWith('.jpg') ||
+        final isImage =
+            lower.endsWith('.jpg') ||
             lower.endsWith('.jpeg') ||
             lower.endsWith('.png') ||
             lower.endsWith('.webp');
@@ -216,9 +226,12 @@ class _DataSuratPageState extends State<DataSuratPage> {
         final ext = '.${lower.split('.').last}';
 
         // rapi dalam zip
-        final filename = 'siswa_$siswaId/surat_${s['id']}_${jenis}_$tanggal$ext';
+        final filename =
+            'siswa_$siswaId/surat_${s['id']}_${jenis}_$tanggal$ext';
 
-        archive.addFile(ArchiveFile(filename, resp.bodyBytes.length, resp.bodyBytes));
+        archive.addFile(
+          ArchiveFile(filename, resp.bodyBytes.length, resp.bodyBytes),
+        );
         added++;
       }
 
@@ -275,8 +288,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
     }
 
     final int total = all.length;
-    final int withFile =
-        all.where((e) => (e['file_url'] ?? '').toString().trim().isNotEmpty).length;
+    final int withFile = all
+        .where((e) => (e['file_url'] ?? '').toString().trim().isNotEmpty)
+        .length;
 
     final confirmCtrl = TextEditingController();
     bool canDelete = false;
@@ -366,7 +380,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
     confirmCtrl.dispose();
   }
 
-  Future<void> _deleteAllSuratAndStorage(List<Map<String, dynamic>> items) async {
+  Future<void> _deleteAllSuratAndStorage(
+    List<Map<String, dynamic>> items,
+  ) async {
     setState(() => isLoading = true);
 
     int deletedFiles = 0;
@@ -406,7 +422,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
         deletedRows += part.length;
       }
 
-      _showSnackbar('Selesai. DB: $deletedRows baris, Storage: $deletedFiles file, gagal-path: $failedFiles');
+      _showSnackbar(
+        'Selesai. DB: $deletedRows baris, Storage: $deletedFiles file, gagal-path: $failedFiles',
+      );
       await fetchSurat();
     } catch (e) {
       _showSnackbar('Gagal menghapus data: $e');
@@ -423,7 +441,8 @@ class _DataSuratPageState extends State<DataSuratPage> {
     }
 
     final lower = fileUrl.toLowerCase();
-    final isImage = lower.endsWith('.png') ||
+    final isImage =
+        lower.endsWith('.png') ||
         lower.endsWith('.jpg') ||
         lower.endsWith('.jpeg') ||
         lower.endsWith('.webp');
@@ -433,7 +452,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
       try {
         final response = await http.get(Uri.parse(fileUrl));
         if (response.statusCode != 200) {
-          _showSnackbar('Gagal mengambil gambar. Status: ${response.statusCode}');
+          _showSnackbar(
+            'Gagal mengambil gambar. Status: ${response.statusCode}',
+          );
           return;
         }
 
@@ -444,7 +465,8 @@ class _DataSuratPageState extends State<DataSuratPage> {
         pdf.addPage(
           pw.Page(
             pageFormat: PdfPageFormat.a4,
-            build: (_) => pw.Center(child: pw.Image(image, fit: pw.BoxFit.contain)),
+            build: (_) =>
+                pw.Center(child: pw.Image(image, fit: pw.BoxFit.contain)),
           ),
         );
 
@@ -464,8 +486,13 @@ class _DataSuratPageState extends State<DataSuratPage> {
           final file = File('${directory.path}/$finalFileName');
           await file.writeAsBytes(pdfBytes);
 
-          final ok = await launchUrl(Uri.file(file.path), mode: LaunchMode.externalApplication);
-          _showSnackbar(ok ? 'PDF dibuat dan dibuka.' : 'PDF dibuat, tapi gagal dibuka.');
+          final ok = await launchUrl(
+            Uri.file(file.path),
+            mode: LaunchMode.externalApplication,
+          );
+          _showSnackbar(
+            ok ? 'PDF dibuat dan dibuka.' : 'PDF dibuat, tapi gagal dibuka.',
+          );
         }
       } catch (e) {
         _showSnackbar('Gagal download/konversi: $e');
@@ -498,7 +525,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
             const SizedBox(height: 28),
             _buildFilter(),
             const SizedBox(height: 20),
-            isLoading ? const Center(child: CircularProgressIndicator()) : _buildTable(),
+            isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _buildTable(),
           ],
         ),
       ),
@@ -509,7 +538,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[500]!]),
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.blue[500]!],
+        ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -519,23 +550,33 @@ class _DataSuratPageState extends State<DataSuratPage> {
           ),
         ],
       ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        runAlignment: WrapAlignment.center,
-        spacing: 16,
-        runSpacing: 12,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Text(
-            'Data Surat Siswa',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+          const Expanded(
+            child: Text(
+              'Data Surat Siswa',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
           ),
+          const SizedBox(width: 16),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.school, color: Colors.white),
               const SizedBox(width: 8),
-              Text(widget.schoolName, style: const TextStyle(color: Colors.white, fontSize: 16)),
+              Text(
+                widget.schoolName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
             ],
           ),
         ],
@@ -564,7 +605,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
             children: [
               Icon(Icons.filter_alt, color: Colors.blueAccent),
               SizedBox(width: 8),
-              Text("Filter Data Surat", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                "Filter Data Surat",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -580,10 +624,15 @@ class _DataSuratPageState extends State<DataSuratPage> {
                   decoration: InputDecoration(
                     labelText: 'Show',
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   items: const [5, 10, 20, 50]
-                      .map((val) => DropdownMenuItem(value: val, child: Text('$val')))
+                      .map(
+                        (val) =>
+                            DropdownMenuItem(value: val, child: Text('$val')),
+                      )
                       .toList(),
                   onChanged: (val) {
                     if (val == null) return;
@@ -631,8 +680,16 @@ class _DataSuratPageState extends State<DataSuratPage> {
                 child: DropdownButtonFormField<String?>(
                   value: selectedJenisSurat,
                   items: [
-                    const DropdownMenuItem<String?>(value: null, child: Text("Semua Jenis")),
-                    ...jenisSuratList.map((jenis) => DropdownMenuItem<String?>(value: jenis, child: Text(jenis))),
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text("Semua Jenis"),
+                    ),
+                    ...jenisSuratList.map(
+                      (jenis) => DropdownMenuItem<String?>(
+                        value: jenis,
+                        child: Text(jenis),
+                      ),
+                    ),
                   ],
                   onChanged: (value) {
                     setState(() => selectedJenisSurat = value);
@@ -640,8 +697,13 @@ class _DataSuratPageState extends State<DataSuratPage> {
                   },
                   decoration: InputDecoration(
                     labelText: 'Jenis Surat',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                 ),
               ),
@@ -652,8 +714,13 @@ class _DataSuratPageState extends State<DataSuratPage> {
                   decoration: InputDecoration(
                     labelText: 'Cari Nama Siswa',
                     prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                 ),
               ),
@@ -714,7 +781,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
           onPressed: currentValue == null ? null : onClear,
         ),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
     );
   }
@@ -769,21 +839,55 @@ class _DataSuratPageState extends State<DataSuratPage> {
                     columnSpacing: 24,
                     headingRowHeight: 56,
                     dataRowHeight: 64,
-                    headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+                    headingRowColor: MaterialStateProperty.all(
+                      Colors.blue.shade50,
+                    ),
                     columns: const [
-                      DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('ID Siswa', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Nama Siswa', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Tanggal', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Jenis Surat', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(
+                        label: Text(
+                          'No',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'ID Siswa',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Nama Siswa',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Tanggal',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Jenis Surat',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Aksi',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ],
                     rows: List.generate(currentData.length, (i) {
                       final s = currentData[i];
                       final rawTanggal = s['tanggal'];
                       final tanggal = rawTanggal == null
                           ? '-'
-                          : DateFormat('dd MMM yyyy').format(DateTime.parse(rawTanggal.toString()).toLocal());
+                          : DateFormat('dd MMM yyyy').format(
+                              DateTime.parse(rawTanggal.toString()).toLocal(),
+                            );
                       final int rowNumber = startIndex + i + 1;
 
                       return DataRow(
@@ -829,24 +933,37 @@ class _DataSuratPageState extends State<DataSuratPage> {
       children: [
         Text(
           "$startItem - $endItem dari ${suratData.length}",
-          style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            color: Colors.grey,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         const SizedBox(width: 16),
         IconButton(
           icon: const Icon(Icons.chevron_left),
-          onPressed: _currentPage > 1 ? () => setState(() => _currentPage--) : null,
+          onPressed: _currentPage > 1
+              ? () => setState(() => _currentPage--)
+              : null,
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(
+            color: Colors.blue,
+            borderRadius: BorderRadius.circular(8),
+          ),
           child: Text(
             "$_currentPage",
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         IconButton(
           icon: const Icon(Icons.chevron_right),
-          onPressed: _currentPage < totalPages ? () => setState(() => _currentPage++) : null,
+          onPressed: _currentPage < totalPages
+              ? () => setState(() => _currentPage++)
+              : null,
         ),
       ],
     );
@@ -856,7 +973,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
     final rawTanggal = surat['tanggal'];
     final String tanggal = rawTanggal == null
         ? '-'
-        : DateFormat('EEEE, dd MMMM yyyy').format(DateTime.parse(rawTanggal.toString()).toLocal());
+        : DateFormat(
+            'EEEE, dd MMMM yyyy',
+          ).format(DateTime.parse(rawTanggal.toString()).toLocal());
 
     final String fileUrl = (surat['file_url'] ?? '').toString();
     final bool hasFile = fileUrl.isNotEmpty;
@@ -880,11 +999,17 @@ class _DataSuratPageState extends State<DataSuratPage> {
                 children: [
                   _buildDetailRow('ID Surat:', '${surat['id'] ?? '-'}'),
                   _buildDetailRow('ID Siswa:', '${surat['siswa_id'] ?? '-'}'),
-                  _buildDetailRow('Nama Siswa:', '${surat['siswa']?['nama'] ?? '-'}'),
+                  _buildDetailRow(
+                    'Nama Siswa:',
+                    '${surat['siswa']?['nama'] ?? '-'}',
+                  ),
                   _buildDetailRow('Tanggal:', tanggal),
                   _buildDetailRow('Jenis Surat:', '${surat['jenis'] ?? '-'}'),
                   const SizedBox(height: 20),
-                  const Text('Preview Surat', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Preview Surat',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 10),
                   if (!hasFile)
                     Container(
@@ -900,7 +1025,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
                   else
                     Center(
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: maxW, maxHeight: maxH),
+                        constraints: BoxConstraints(
+                          maxWidth: maxW,
+                          maxHeight: maxH,
+                        ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: Image.network(
@@ -927,7 +1055,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
               ),
             ),
           ),
-          actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          actionsPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 16,
+          ),
           actions: [
             Row(
               children: [
@@ -970,7 +1101,13 @@ class _DataSuratPageState extends State<DataSuratPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 110, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
           Expanded(child: Text(value)),
         ],
       ),
@@ -992,7 +1129,10 @@ class _DataSuratPageState extends State<DataSuratPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       icon: Icon(icon, size: 16),
-      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
       onPressed: onPressed,
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,205 +14,197 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final SupabaseClient supabase = Supabase.instance.client;
-  late final RealtimeChannel _absensiChannel;
+
+  RealtimeChannel? _absensiChannel;
+  Timer? _refreshDebounce;
 
   bool _isLoading = true;
+  String? _errorMessage;
+  DateTime? _lastUpdated;
 
-  // State untuk Quick Stats & Detailed Stats Harian
-  int _totalSiswa = 0;
+  // Quick Stats (Hari ini)
+  int _totalSiswaAktif = 0;
   int _hadirHariIni = 0;
   int _terlambatHariIni = 0;
-  int _absenHariIni = 0; // (Sakit, Izin, Alfa)
+  int _absenHariIni = 0;
 
-  // State untuk Aktivitas Terbaru
+  // Aktivitas + Alerts
   List<Map<String, dynamic>> _aktivitasTerbaru = [];
+  List<Map<String, dynamic>> _alerts = [];
 
-  // --- BARU: State untuk Distribusi Kelas ---
+  // Distribusi kelas
   List<Map<String, dynamic>> _distribusiKelas = [];
 
-  // --- BARU: State untuk Rekapan Semester ---
+  // Rekapan semester
   int _hadirSemester = 0;
   int _terlambatSemester = 0;
   int _absenSemester = 0;
   int _totalHariSemester = 0;
-  // --- AKHIR BARU ---
 
-  // BARU: Daftar warna untuk pie chart
-  final List<Color> _pieColors = [
-    const Color(0xFF42A5F5), // Biru
-    const Color(0xFF66BB6A), // Hijau
-    const Color(0xFFAB47BC), // Ungu
-    const Color(0xFFFFA726), // Oranye
-    const Color(0xFFEF5350), // Merah
-    const Color(0xFF26C6DA), // Cyan
-    const Color(0xFF7E57C2), // Deep Purple
-    const Color(0xFFD4E157), // Lime
+  final List<Color> _pieColors = const [
+    Color(0xFF42A5F5),
+    Color(0xFF66BB6A),
+    Color(0xFFAB47BC),
+    Color(0xFFFFA726),
+    Color(0xFFEF5350),
+    Color(0xFF26C6DA),
+    Color(0xFF7E57C2),
+    Color(0xFFD4E157),
   ];
-  
-  
-  List<Map<String, dynamic>> _alerts = [];
 
   @override
   void initState() {
     super.initState();
+    Intl.defaultLocale = 'id_ID';
     _initializeDashboard();
   }
 
   @override
   void dispose() {
-    // BARU: Pastikan untuk unsubscribe channel (SYNTAX V2 BARU)
-    supabase.removeChannel(_absensiChannel);
+    _refreshDebounce?.cancel();
+    final ch = _absensiChannel;
+    if (ch != null) supabase.removeChannel(ch);
     super.dispose();
   }
 
-  // BARU: Fungsi untuk setup awal dan listener
   Future<void> _initializeDashboard() async {
-    // 1. Ambil data awal
-    await _fetchDashboardData();
+    await _fetchDashboardData(showLoadingOverlay: true);
 
-    // 2. Siapkan listener realtime (SYNTAX V2 YANG BENAR)
+    // Realtime listener: debounce agar tidak spam fetch
     _absensiChannel = supabase.channel('public:absensi');
 
-    _absensiChannel
+    _absensiChannel!
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'absensi',
-
-          // --- INI ADALAH PERBAIKANNYA ---
-          callback: (payload) {
-            debugPrint(
-              'Perubahan terdeteksi di tabel absensi! (payload: $payload)',
-            );
-
-            if (mounted) {
-              _fetchDashboardData();
-            }
+          callback: (_) {
+            _refreshDebounce?.cancel();
+            _refreshDebounce = Timer(const Duration(milliseconds: 500), () {
+              if (mounted) _fetchDashboardData(showLoadingOverlay: false);
+            });
           },
         )
         .subscribe();
   }
 
-  // BARU: Fungsi utama untuk mengambil dan menghitung data
-  // GANTI FUNGSI _fetchDashboardData LAMA ANDA DENGAN INI
+  // =========================
+  // DATA CONSISTENCY HELPERS
+  // =========================
+  String _normStatus(dynamic s) => (s ?? '').toString().trim().toLowerCase();
 
-  Future<void> _fetchDashboardData() async {
+  bool _isHadirLike(String status) => status == 'hadir' || status == 'pulang';
+
+  bool _isAbsenLike(String status) =>
+      status == 'sakit' || status == 'izin' || status == 'alfa';
+
+  // =========================
+  // FETCH
+  // =========================
+  Future<void> _fetchDashboardData({required bool showLoadingOverlay}) async {
     if (!mounted) return;
 
-    // Set loading hanya jika data belum ada
-    if (_totalSiswa == 0) {
-      setState(() => _isLoading = true);
+    if (showLoadingOverlay) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    } else {
+      // keep UI stable; update quietly
+      setState(() => _errorMessage = null);
     }
 
     try {
-      // --- PERBAIKAN: Tentukan tanggal hari ini (format YYYY-MM-DD) ---
-      final String tglHariIni = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      // --- AKHIR PERBAIKAN ---
-
-      // --- BARU: Tentukan Rentang Tanggal Semester ---
       final now = DateTime.now();
+      final tglHariIni = DateFormat('yyyy-MM-dd').format(now);
+
+      // Semester: Jan-Jun (semester genap) / Jul-Dec (semester ganjil)
       final currentYear = now.year;
-      String tglMulaiSemester;
-      String tglAkhirSemester;
+      final bool isJanToJun = now.month >= 1 && now.month <= 6;
 
-      if (now.month >= 1 && now.month <= 6) {
-        // Semester 2 (Jan - Jun)
-        tglMulaiSemester = DateFormat(
-          'yyyy-MM-dd',
-        ).format(DateTime(currentYear, 1, 1));
-        tglAkhirSemester = DateFormat(
-          'yyyy-MM-dd',
-        ).format(DateTime(currentYear, 6, 30));
-      } else {
-        // Semester 1 (Jul - Des)
-        tglMulaiSemester = DateFormat(
-          'yyyy-MM-dd',
-        ).format(DateTime(currentYear, 7, 1));
-        tglAkhirSemester = DateFormat(
-          'yyyy-MM-dd',
-        ).format(DateTime(currentYear, 12, 31));
-      }
-      // --- AKHIR BARU ---
+      final tglMulaiSemester = DateFormat('yyyy-MM-dd').format(
+        DateTime(currentYear, isJanToJun ? 1 : 7, 1),
+      );
 
-      // Query 1: Total Siswa (MODIFIKASI: Tambahkan filter status 'aktif')
-      // --- PERBAIKAN SINTAKS COUNT ---
-      final totalSiswa = await supabase
-          .from('siswa')
-          .count(CountOption.exact) // Sintaks yang benar untuk menghitung
-          .eq('status', 'aktif'); // <-- HANYA HITUNG SISWA AKTIF
-      // --- AKHIR PERBAIKAN ---
+      final tglAkhirSemester = DateFormat('yyyy-MM-dd').format(
+        DateTime(currentYear, isJanToJun ? 6 : 12, isJanToJun ? 30 : 31),
+      );
 
-      // Query 2: Absensi Hari Ini (KEMBALI KE 'eq' KARENA TANGGAL ADALAH 'date')
-      final absensiRes = await supabase
+      // 1) Total siswa aktif (lebih aman compile: select id lalu length)
+      final siswaRes =
+          await supabase.from('siswa').select('id').eq('status', 'aktif');
+      final totalSiswaAktif = (siswaRes as List).length;
+
+      // 2) Absensi hari ini (ambil minimal kolom yang dibutuhkan)
+      final absensiHariIni = await supabase
           .from('absensi')
-          .select()
-          .eq('tanggal', tglHariIni); // <-- INI PERBAIKANNYA
+          .select('status, created_at, waktu_masuk, siswa_id')
+          .eq('tanggal', tglHariIni);
 
-      // Query 3: Aktivitas Terbaru (ini sudah benar)
+      // 3) Aktivitas terbaru (join siswa)
       final aktivitasRes = await supabase
           .from('absensi')
-          .select('*, siswa (nama)') // Join dengan tabel siswa
+          .select('status, created_at, waktu_masuk, siswa(nama)')
           .order('created_at', ascending: false)
-          .limit(5);
+          .limit(6);
 
-      // Query 4: Distribusi Siswa per Kelas (ini sudah benar)
-      final distribusiRes = await supabase
-          .from('kelas')
-          .select('id, nama_kelas, siswa(count)');
+      // 4) Distribusi kelas (kelas dengan count siswa)
+      final distribusiRes =
+          await supabase.from('kelas').select('id, nama_kelas, siswa(count)');
 
-      // --- BARU: Query 5: Rekapan Semester ---
-      // Ambil semua data absensi dalam rentang semester
+      // 5) Rekapan semester (status + tanggal)
       final rekapanSemesterRes = await supabase
           .from('absensi')
           .select('status, tanggal')
-          .gte(
-            'tanggal',
-            tglMulaiSemester,
-          ) // Lebih besar atau sama dengan tgl mulai
-          .lte(
-            'tanggal',
-            tglAkhirSemester,
-          ); // Lebih kecil atau sama dengan tgl akhir
-      // --- AKHIR BARU ---
+          .gte('tanggal', tglMulaiSemester)
+          .lte('tanggal', tglAkhirSemester);
 
-      // --- AKHIR PERBAIKAN ---
-
-      // --- Mulai Proses Data ---
-
-      // 1. Proses Total Siswa (sudah jadi int)
-
-      // 2. Proses Absensi Hari Ini
+      // =========================
+      // PROCESS: HARI INI
+      // =========================
       int hadir = 0;
       int terlambat = 0;
       int absen = 0;
 
-      for (var data in absensiRes) {
-        // Gunakan absensiRes
-        final status = data['status']?.toString().toLowerCase();
+      int inputLuarJam = 0;
+      int totalTerlambatHariIni = 0;
 
-        if (status == 'hadir' || status == 'pulang') {
+      for (final row in (absensiHariIni as List)) {
+        final status = _normStatus(row['status']);
+
+        if (_isHadirLike(status)) {
           hadir++;
         } else if (status == 'terlambat') {
           terlambat++;
-        } else if (status == 'sakit' || status == 'izin' || status == 'alfa') {
+          totalTerlambatHariIni++;
+        } else if (_isAbsenLike(status)) {
           absen++;
+        }
+
+        final createdAt = row['created_at']?.toString();
+        if (createdAt != null) {
+          final dt = DateTime.tryParse(createdAt)?.toLocal();
+          if (dt != null) {
+            if (dt.hour < 6 || dt.hour >= 17) inputLuarJam++;
+          }
         }
       }
 
-      // 3. Proses Aktivitas Terbaru
-
-      // 4. Proses Distribusi Kelas
+      // =========================
+      // PROCESS: DISTRIBUSI KELAS
+      // =========================
       final List<Map<String, dynamic>> distribusiData = [];
       int colorIndex = 0;
-      for (var item in distribusiRes) {
-        // Gunakan distribusiRes
-        final count = item['siswa'].isNotEmpty
-            ? item['siswa'][0]['count'] as int
+
+      for (final item in (distribusiRes as List)) {
+        final siswaCountList = item['siswa'];
+        final int count = (siswaCountList is List && siswaCountList.isNotEmpty)
+            ? (siswaCountList[0]['count'] as int? ?? 0)
             : 0;
 
         if (count > 0) {
           distribusiData.add({
-            'label': item['nama_kelas'],
+            'label': (item['nama_kelas'] ?? '-').toString(),
             'value': count.toDouble(),
             'color': _pieColors[colorIndex % _pieColors.length],
           });
@@ -218,50 +212,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
 
-      // --- BARU: 5. Proses Rekapan Semester ---
+      // =========================
+      // PROCESS: SEMESTER
+      // =========================
       int hadirSem = 0;
       int terlambatSem = 0;
       int absenSem = 0;
-      Set<String> hariUnik = {}; // Untuk menghitung total hari sekolah
+      final Set<String> hariUnik = {};
 
-      for (var data in rekapanSemesterRes) {
-        final status = data['status']?.toString().toLowerCase();
-        hariUnik.add(data['tanggal'].toString()); // Catat hari unik
+      for (final row in (rekapanSemesterRes as List)) {
+        final status = _normStatus(row['status']);
+        final tgl = row['tanggal']?.toString();
+        if (tgl != null) hariUnik.add(tgl);
 
-        if (status == 'hadir' || status == 'pulang') {
+        if (_isHadirLike(status)) {
           hadirSem++;
         } else if (status == 'terlambat') {
           terlambatSem++;
-        } else if (status == 'sakit' || status == 'izin' || status == 'alfa') {
+        } else if (_isAbsenLike(status)) {
           absenSem++;
         }
       }
-      // --- AKHIR BARU ---
-      // --- 3. LOGIKA ALERTS ANOMALI (DIPINDAHKAN KE SINI) ---
-      // Logika ini HARUS di dalam fungsi, setelah data absensiRes tersedia
-      
-      List<Map<String, dynamic>> anomalyAlerts = [];
-      int inputLuarJam = 0;
-      int totalTerlambatAnomali = 0;
 
-      for (var data in absensiRes) {
-        // Cek Status Terlambat untuk Alerts
-        if (data['status']?.toString().toLowerCase() == 'terlambat') {
-          totalTerlambatAnomali++;
-        }
+      // =========================
+      // ALERTS (konsisten, deterministic)
+      // =========================
+      final List<Map<String, dynamic>> anomalyAlerts = [];
 
-        // Cek Waktu Input
-        final String? timeStr = data['created_at']?.toString();
-        if (timeStr != null) {
-          final DateTime entryTime = DateTime.parse(timeStr).toLocal();
-          // Anomali jika < jam 6 pagi ATAU > jam 5 sore
-          if (entryTime.hour < 6 || entryTime.hour >= 17) {
-            inputLuarJam++;
-          }
-        }
-      }
-
-      // Alert 1: Input Luar Jam
       if (inputLuarJam > 0) {
         anomalyAlerts.add({
           'icon': Icons.access_time_filled,
@@ -271,30 +248,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
 
-      // Alert 2: Aktivitas Hari Minggu
-      if (now.weekday == DateTime.sunday && absensiRes.isNotEmpty) {
+      if (now.weekday == DateTime.sunday && (absensiHariIni as List).isNotEmpty) {
         anomalyAlerts.add({
           'icon': Icons.event_busy,
           'color': const Color(0xFFFFA726),
           'title': 'Aktivitas di Hari Libur',
-          'subtitle': 'Sistem mendeteksi input data absensi pada hari Minggu.',
+          'subtitle': 'Terdeteksi input absensi pada hari Minggu.',
         });
       }
 
-      // Alert 3: Lonjakan Keterlambatan (> 20%)
-      if (totalSiswa > 0) {
-        final double persentaseTerlambat = totalTerlambatAnomali / totalSiswa;
-        if (persentaseTerlambat > 0.20) {
+      if (totalSiswaAktif > 0) {
+        final p = totalTerlambatHariIni / totalSiswaAktif;
+        if (p > 0.20) {
           anomalyAlerts.add({
             'icon': Icons.warning_rounded,
-            'color': Colors.purple,
+            'color': const Color(0xFF7E57C2),
             'title': 'Lonjakan Keterlambatan',
             'subtitle': 'Lebih dari 20% siswa terlambat hari ini.',
           });
         }
       }
 
-      // Alert 4: Normal
       if (anomalyAlerts.isEmpty) {
         anomalyAlerts.add({
           'icon': Icons.verified_user,
@@ -303,171 +277,248 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'subtitle': 'Tidak ditemukan anomali pada data absensi hari ini.',
         });
       }
-      // --- AKHIR LOGIKA ALERTS ---
 
-      // 6. Update state
+      // =========================
+      // APPLY STATE
+      // =========================
+      if (!mounted) return;
       setState(() {
-        // --- PERBAIKAN: Ambil 'count' dari hasil query totalSiswa ---
-        _totalSiswa = totalSiswa;
-        // --- AKHIR PERBAIKAN ---
+        _totalSiswaAktif = totalSiswaAktif;
+
         _hadirHariIni = hadir;
         _terlambatHariIni = terlambat;
         _absenHariIni = absen;
-        _aktivitasTerbaru = List<Map<String, dynamic>>.from(
-          aktivitasRes,
-        ); // Gunakan aktivitasRes
+
+        _aktivitasTerbaru = List<Map<String, dynamic>>.from(aktivitasRes as List);
         _distribusiKelas = distribusiData;
 
-        // --- BARU: Update State Semester ---
         _hadirSemester = hadirSem;
         _terlambatSemester = terlambatSem;
         _absenSemester = absenSem;
-        _totalHariSemester = hariUnik.length; // Total hari sekolah yg ada datanya
-        
+        _totalHariSemester = hariUnik.length;
+
         _alerts = anomalyAlerts;
 
+        _lastUpdated = DateTime.now();
         _isLoading = false;
+        _errorMessage = null;
       });
-    } catch (e, st) {
-      debugPrint('--- ERROR FETCHING DASHBOARD ---');
-      debugPrint('ERROR: $e');
-      debugPrint('STACK TRACE: $st');
-      debugPrint('----------------------------------');
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal memuat data: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.toString();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal memuat dashboard: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
+  // =========================
+  // UI
+  // =========================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-      body: _isLoading
-          // Tampilkan loading di tengah jika data belum siap
-          ? const Center(child: CircularProgressIndicator())
-          // Tampilkan dashboard jika data sudah siap
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              // MODIFIKASI: Hapus 'const' dari Column dan widget di dalamnya
-              child: Column(
-                children: [
-                  const _AppHeader(), // Header tetap statis
-                  const SizedBox(height: 20),
-                  const SizedBox(height: 20),
-                  // MODIFIKASI: Kirim data dinamis ke _QuickStats
-                  _QuickStats(
-                    totalSiswa: _totalSiswa,
-                    hadirHariIni: _hadirHariIni,
-                    terlambatHariIni: _terlambatHariIni,
-                    absenHariIni: _absenHariIni,
-                  ),
-                  const SizedBox(height: 20),
-                  // MODIFIKASI: Kirim data dinamis ke _DetailedStats
-                  // (Ganti data harian dengan data semester)
-                  _DetailedStats(
-                    totalSiswa: _totalSiswa,
-                    hadirSemester: _hadirSemester,
-                    terlambatSemester: _terlambatSemester,
-                    absenSemester: _absenSemester,
-                    totalHariSemester: _totalHariSemester,
-                  ),
-                  const SizedBox(height: 30),
-                  // MODIFIKASI: Kirim data dinamis ke _ChartsSection
-                  _ChartsSection(distribusiKelas: _distribusiKelas),
-                  const SizedBox(height: 30),
-                  // MODIFIKASI: Kirim data dinamis ke _BottomSection
-                  _BottomSection(
-                    alerts: _alerts,
-                    activities: _aktivitasTerbaru,
-                  ),
-                ],
+      body: SafeArea(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: () => _fetchDashboardData(showLoadingOverlay: false),
+                child: LayoutBuilder(
+                  builder: (context, c) {
+                    final w = c.maxWidth;
+
+                    // Responsive breakpoints
+                    final bool isMobile = w < 700;
+                    final bool isTablet = w >= 700 && w < 1100;
+
+                    return SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.all(isMobile ? 14 : 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _AppHeader(
+                            lastUpdated: _lastUpdated,
+                            errorMessage: _errorMessage,
+                            onRefresh: () => _fetchDashboardData(
+                              showLoadingOverlay: false,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          _SectionTitle(
+                            title: 'Ringkasan Hari Ini',
+                            subtitle: 'Konsisten dengan siswa aktif dan status absensi.',
+                          ),
+                          const SizedBox(height: 12),
+
+                          _QuickStatsResponsive(
+                            isMobile: isMobile,
+                            isTablet: isTablet,
+                            totalSiswa: _totalSiswaAktif,
+                            hadirHariIni: _hadirHariIni,
+                            terlambatHariIni: _terlambatHariIni,
+                            absenHariIni: _absenHariIni,
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          _SectionTitle(
+                            title: 'Rekapan Semester',
+                            subtitle: 'Menghitung total potensi kehadiran berdasarkan hari unik yang memiliki data.',
+                          ),
+                          const SizedBox(height: 12),
+
+                          _DetailedStatsResponsive(
+                            isMobile: isMobile,
+                            totalSiswa: _totalSiswaAktif,
+                            hadirSemester: _hadirSemester,
+                            terlambatSemester: _terlambatSemester,
+                            absenSemester: _absenSemester,
+                            totalHariSemester: _totalHariSemester,
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          _SectionTitle(
+                            title: 'Visualisasi',
+                            subtitle: 'Tren dan distribusi untuk membantu keputusan.',
+                          ),
+                          const SizedBox(height: 12),
+
+                          _ChartsSectionResponsive(
+                            isMobile: isMobile,
+                            distribusiKelas: _distribusiKelas,
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          _SectionTitle(
+                            title: 'Monitoring',
+                            subtitle: 'Peringatan sistem dan aktivitas terbaru.',
+                          ),
+                          const SizedBox(height: 12),
+
+                          _BottomSectionResponsive(
+                            isMobile: isMobile,
+                            alerts: _alerts,
+                            activities: _aktivitasTerbaru,
+                          ),
+
+                          const SizedBox(height: 24),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
+      ),
     );
   }
 }
 
-// =========================================================================
-// WIDGET-WIDGET BAGIAN UI
-// =========================================================================
+// ============================================================================
+// UI COMPONENTS (lebih konsisten & responsive)
+// ============================================================================
 
-// --- HEADER & PROFILE ---
-class _AppHeader extends StatelessWidget {
-  const _AppHeader();
+class _SectionTitle extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _SectionTitle({required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
-    return _WhiteCard(
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.only(left: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Dashboard Admin",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const Spacer(),
-          // Expanded(flex: 2, child: _SearchBar()),
-          // const SizedBox(width: 20),
-          _ProfileSection(),
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 2),
+          Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ],
       ),
     );
   }
 }
 
-// class _SearchBar extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     return Container(
-//       height: 40,
-//       padding: const EdgeInsets.symmetric(horizontal: 15),
-//       decoration: BoxDecoration(
-//         color: Colors.grey.shade50,
-//         borderRadius: BorderRadius.circular(30),
-//         border: Border.all(color: Colors.grey.shade200),
-//       ),
-//       child: const Row(
-//         children: [
-//           Icon(Icons.search, color: Colors.grey, size: 20),
-//           SizedBox(width: 10),
-//           Expanded(
-//             child: TextField(
-//               decoration: InputDecoration(
-//                 hintText: "Cari data...",
-//                 hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
-//                 border: InputBorder.none,
-//                 isDense: true,
-//               ),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
+class _AppHeader extends StatelessWidget {
+  final DateTime? lastUpdated;
+  final String? errorMessage;
+  final VoidCallback onRefresh;
+
+  const _AppHeader({
+    required this.lastUpdated,
+    required this.errorMessage,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final last = lastUpdated == null ? '-' : DateFormat('dd MMM yyyy, HH:mm').format(lastUpdated!);
+
+    return _WhiteCard(
+      child: Row(
+        children: [
+          const Icon(Icons.dashboard_rounded, color: Color(0xFF42A5F5)),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Dashboard Admin',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('Terakhir update', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              Text(last, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(width: 12),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh),
+          ),
+          const SizedBox(width: 6),
+          const _ProfileSection(),
+          if (errorMessage != null) ...[
+            const SizedBox(width: 10),
+            Tooltip(
+              message: errorMessage!,
+              child: const Icon(Icons.error_outline, color: Colors.red),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 class _ProfileSection extends StatelessWidget {
+  const _ProfileSection();
+
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         const CircleAvatar(
-          radius: 18,
+          radius: 16,
           backgroundColor: Color(0xFF42A5F5),
           child: Text(
             "A",
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
           ),
         ),
         const SizedBox(width: 10),
@@ -475,14 +526,8 @@ class _ProfileSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: const [
-            Text(
-              "Admin",
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-            Text(
-              "MTs Sunan Gunung Jati",
-              style: TextStyle(fontSize: 11, color: Colors.grey),
-            ),
+            Text("Admin", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            Text("MTs Sunan Gunung Jati", style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
       ],
@@ -490,15 +535,18 @@ class _ProfileSection extends StatelessWidget {
   }
 }
 
-// --- STATS CEPAT (QUICK STATS) ---
-// MODIFIKASI: Hapus rataRataBulanan
-class _QuickStats extends StatelessWidget {
+class _QuickStatsResponsive extends StatelessWidget {
+  final bool isMobile;
+  final bool isTablet;
+
   final int totalSiswa;
   final int hadirHariIni;
   final int terlambatHariIni;
   final int absenHariIni;
 
-  const _QuickStats({
+  const _QuickStatsResponsive({
+    required this.isMobile,
+    required this.isTablet,
     required this.totalSiswa,
     required this.hadirHariIni,
     required this.terlambatHariIni,
@@ -507,109 +555,130 @@ class _QuickStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Hitung persentase
-    final int totalHadir = hadirHariIni + terlambatHariIni;
-    // Cegah pembagian / 0 jika totalSiswa masih 0
-    final String persenHadir = (totalSiswa > 0)
-        ? '${((totalHadir / totalSiswa) * 100).toStringAsFixed(0)}%'
-        : '0%';
+    final totalHadir = hadirHariIni + terlambatHariIni;
+    final persenHadir = (totalSiswa > 0) ? ((totalHadir / totalSiswa) * 100).toStringAsFixed(0) : '0';
 
-    final stats = [
-      {
-        'value': persenHadir, // <-- Data dinamis
-        'title': 'Kehadiran Hari Ini',
-        'icon': Icons.people_outline,
-        'color': const Color(0xFF42A5F5),
-      },
-      {
-        'value': terlambatHariIni.toString(), // <-- Data dinamis
-        'title': 'Siswa Terlambat',
-        'icon': Icons.access_time,
-        'color': const Color(0xFFFFA726),
-      },
-      {
-        'value': absenHariIni.toString(), // <-- Data dinamis
-        'title': 'Siswa Absen',
-        'icon': Icons.person_off_outlined,
-        'color': const Color(0xFFEF5350),
-      },
-      // MODIFIKASI: Ganti kartu Rata-rata Bulanan menjadi Total Siswa
-      {
-        'value': totalSiswa.toString(), // <-- DATA DINAMIS
-        'title': 'Total Siswa', // <-- JUDUL BARU
-        'icon': Icons.school_outlined, // <-- IKON BARU
-        'color': const Color(0xFFAB47BC),
-      },
+    final cards = [
+      _StatCardData(
+        title: 'Kehadiran Hari Ini',
+        value: '$persenHadir%',
+        subtitle: '$totalHadir dari $totalSiswa siswa aktif',
+        icon: Icons.people_outline,
+        color: const Color(0xFF42A5F5),
+      ),
+      _StatCardData(
+        title: 'Terlambat',
+        value: terlambatHariIni.toString(),
+        subtitle: 'Hari ini',
+        icon: Icons.access_time,
+        color: const Color(0xFFFFA726),
+      ),
+      _StatCardData(
+        title: 'Absen',
+        value: absenHariIni.toString(),
+        subtitle: 'Sakit / Izin / Alfa',
+        icon: Icons.person_off_outlined,
+        color: const Color(0xFFEF5350),
+      ),
+      _StatCardData(
+        title: 'Total Siswa Aktif',
+        value: totalSiswa.toString(),
+        subtitle: 'Status: aktif',
+        icon: Icons.school_outlined,
+        color: const Color(0xFFAB47BC),
+      ),
     ];
+
+    int crossAxisCount = 4;
+    double childAspect = 2.3;
+
+    if (isMobile) {
+      crossAxisCount = 1;
+      childAspect = 3.2;
+    } else if (isTablet) {
+      crossAxisCount = 2;
+      childAspect = 2.6;
+    }
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        crossAxisSpacing: 20,
-        mainAxisSpacing: 20,
-        childAspectRatio: 2,
+      itemCount: cards.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: childAspect,
       ),
-      itemCount: stats.length,
-      itemBuilder: (c, i) => _WhiteCard(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: (stats[i]['color'] as Color).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                stats[i]['icon'] as IconData,
-                color: stats[i]['color'] as Color,
-                size: 28,
-              ),
+      itemBuilder: (_, i) => _StatCard(cards[i]),
+    );
+  }
+}
+
+class _StatCardData {
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+
+  _StatCardData({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+  });
+}
+
+class _StatCard extends StatelessWidget {
+  final _StatCardData data;
+  const _StatCard(this.data);
+
+  @override
+  Widget build(BuildContext context) {
+    return _WhiteCard(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: data.color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(width: 15),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    stats[i]['value'] as String,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Flexible(
-                    child: Text(
-                      stats[i]['title'] as String,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+            child: Icon(data.icon, color: data.color, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(data.value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text(data.title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(data.subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// --- STATS DETAIL (DETAILED STATS) ---
-// MODIFIKASI: Widget ini sekarang menerima data semester
-class _DetailedStats extends StatelessWidget {
+class _DetailedStatsResponsive extends StatelessWidget {
+  final bool isMobile;
+
   final int totalSiswa;
   final int hadirSemester;
   final int terlambatSemester;
   final int absenSemester;
   final int totalHariSemester;
 
-  const _DetailedStats({
+  const _DetailedStatsResponsive({
+    required this.isMobile,
     required this.totalSiswa,
     required this.hadirSemester,
     required this.terlambatSemester,
@@ -619,208 +688,160 @@ class _DetailedStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Total potensi absensi = (misal) 51 siswa * (misal) 100 hari sekolah
-    final double totalPotensiKehadiran = (totalSiswa * totalHariSemester)
-        .toDouble();
+    final totalPotensi = (totalSiswa * totalHariSemester).toDouble();
+    final totalHadir = hadirSemester + terlambatSemester;
 
-    // Total gabungan hadir + terlambat
-    final int totalHadirSemester = hadirSemester + terlambatSemester;
-
-    // Persentase kehadiran (dari total potensi)
-    final double persenHadir = (totalPotensiKehadiran > 0)
-        ? (totalHadirSemester / totalPotensiKehadiran)
-        : 0.0;
-
-    // Persentase terlambat (dari total potensi)
-    final double persenTerlambat = (totalPotensiKehadiran > 0)
-        ? (terlambatSemester / totalPotensiKehadiran)
-        : 0.0;
-
-    // Persentase absen (dari total potensi)
-    final double persenAbsen = (totalPotensiKehadiran > 0)
-        ? (absenSemester / totalPotensiKehadiran)
-        : 0.0;
-
-    // Tampilan jika data semester belum ada
-    if (totalPotensiKehadiran == 0) {
-      return SizedBox(
-        height: 190, // Sesuaikan tinggi agar konsisten
-        child: Row(
-          children: [
-            Expanded(
-              child: _WhiteCard(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Colors.grey.shade400,
-                        size: 40,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Data Rekapan Semester Belum Tersedia',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
-                      ),
-                    ],
-                  ),
+    if (totalPotensi == 0) {
+      return _WhiteCard(
+        child: SizedBox(
+          height: 140,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.info_outline, color: Colors.grey.shade400, size: 40),
+                const SizedBox(height: 10),
+                const Text(
+                  'Data rekapan semester belum tersedia.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       );
     }
 
-    final stats = [
-      {
-        'title': 'RATA-RATA KEHADIRAN', // Judul baru
-        'value': '${(persenHadir * 100).toStringAsFixed(0)}%', // Rata-rata
-        'change': '',
-        'positive': true,
-        'progress': persenHadir,
-        'subtitle':
-            '$totalHadirSemester dari ${totalPotensiKehadiran.toInt()}', // Subtitle baru
-        'detail': '1 Semester', // Detail baru
-        'color': const Color(0xFF66BB6A),
-        'icon': Icons.check_circle_outline,
-      },
-      {
-        'title': 'TOTAL KETERLAMBATAN', // Judul baru
-        'value': terlambatSemester.toString(), // Total
-        'change': '',
-        'positive': false,
-        'progress': persenTerlambat,
-        'subtitle': '${(persenTerlambat * 100).toStringAsFixed(1)}% dari total',
-        'detail': '1 Semester', // Detail baru
-        'color': const Color(0xFFFFA726),
-        'icon': Icons.access_time,
-      },
-      {
-        'title': 'TOTAL KETIDAKHADIRAN', // Judul baru
-        'value': absenSemester.toString(), // Total
-        'change': '',
-        'positive': true,
-        'progress': persenAbsen,
-        'subtitle': '${(persenAbsen * 100).toStringAsFixed(1)}% dari total',
-        'detail': '1 Semester', // Detail baru
-        'color': const Color(0xFFEF5350),
-        'icon': Icons.person_off_outlined,
-      },
+    final pHadir = totalPotensi > 0 ? totalHadir / totalPotensi : 0.0;
+    final pTerlambat = totalPotensi > 0 ? terlambatSemester / totalPotensi : 0.0;
+    final pAbsen = totalPotensi > 0 ? absenSemester / totalPotensi : 0.0;
+
+    final cards = [
+      _DetailCardData(
+        title: 'Rata-rata Kehadiran',
+        value: '${(pHadir * 100).toStringAsFixed(0)}%',
+        subtitle: '$totalHadir dari ${totalPotensi.toInt()} potensi',
+        color: const Color(0xFF66BB6A),
+        icon: Icons.check_circle_outline,
+        progress: pHadir,
+      ),
+      _DetailCardData(
+        title: 'Total Keterlambatan',
+        value: terlambatSemester.toString(),
+        subtitle: '${(pTerlambat * 100).toStringAsFixed(1)}% dari total',
+        color: const Color(0xFFFFA726),
+        icon: Icons.access_time,
+        progress: pTerlambat,
+      ),
+      _DetailCardData(
+        title: 'Total Ketidakhadiran',
+        value: absenSemester.toString(),
+        subtitle: '${(pAbsen * 100).toStringAsFixed(1)}% dari total',
+        color: const Color(0xFFEF5350),
+        icon: Icons.person_off_outlined,
+        progress: pAbsen,
+      ),
+      _DetailCardData(
+        title: 'Hari (berdasarkan data)',
+        value: totalHariSemester.toString(),
+        subtitle: 'Hari unik yang memiliki input',
+        color: const Color(0xFF42A5F5),
+        icon: Icons.calendar_today,
+        progress: 1.0,
+      ),
     ];
 
+    if (isMobile) {
+      return Column(
+        children: [
+          for (int i = 0; i < cards.length; i++) ...[
+            _DetailStatCard(cards[i]),
+            if (i != cards.length - 1) const SizedBox(height: 12),
+          ],
+        ],
+      );
+    }
+
     return Row(
-      children: stats
-          .map(
-            (s) => Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: s == stats.last ? 0 : 20),
-                child: _DetailStatCard(s),
-              ),
-            ),
-          )
-          .toList(),
+      children: [
+        for (int i = 0; i < cards.length; i++) ...[
+          Expanded(child: _DetailStatCard(cards[i])),
+          if (i != cards.length - 1) const SizedBox(width: 12),
+        ],
+      ],
     );
   }
 }
 
+class _DetailCardData {
+  final String title;
+  final String value;
+  final String subtitle;
+  final Color color;
+  final IconData icon;
+  final double progress;
+
+  _DetailCardData({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.color,
+    required this.icon,
+    required this.progress,
+  });
+}
+
 class _DetailStatCard extends StatelessWidget {
-  final Map<String, dynamic> data;
+  final _DetailCardData data;
   const _DetailStatCard(this.data);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border(top: BorderSide(color: data['color'], width: 3)),
+        border: Border(top: BorderSide(color: data.color, width: 3)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.grey.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                data['title'],
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey,
-                  letterSpacing: 0.5,
+              Expanded(
+                child: Text(
+                  data.title.toUpperCase(),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey, letterSpacing: 0.4),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: (data['color'] as Color).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: data.color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(data['icon'], color: data['color'], size: 20),
+                child: Icon(data.icon, color: data.color, size: 20),
               ),
             ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            data['value'],
-            style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          if (data['change'].isNotEmpty)
-            Row(
-              children: [
-                Icon(
-                  data['positive'] ? Icons.arrow_upward : Icons.arrow_downward,
-                  color: data['positive'] ? Colors.green : Colors.red,
-                  size: 14,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  data['change'],
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: data['positive'] ? Colors.green : Colors.red,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          // Beri Sizedbox kosong jika 'change' tidak ada agar tinggi konsisten
-          if (data['change'].isEmpty) const SizedBox(height: 16),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: data['progress'],
-              backgroundColor: Colors.grey.shade200,
-              color: data['color'],
-              minHeight: 6,
-            ),
           ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                data['subtitle'],
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              Text(
-                data['detail'],
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-            ],
+          Text(data.value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(data.subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: data.progress.clamp(0.0, 1.0),
+              minHeight: 7,
+              backgroundColor: Colors.grey.shade200,
+              color: data.color,
+            ),
           ),
         ],
       ),
@@ -828,52 +849,93 @@ class _DetailStatCard extends StatelessWidget {
   }
 }
 
-// --- BAGIAN CHARTS ---
-class _ChartsSection extends StatelessWidget {
+class _ChartsSectionResponsive extends StatelessWidget {
+  final bool isMobile;
   final List<Map<String, dynamic>> distribusiKelas;
 
-  const _ChartsSection({required this.distribusiKelas});
+  const _ChartsSectionResponsive({
+    required this.isMobile,
+    required this.distribusiKelas,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (isMobile) {
+      return Column(
+        children: [
+          const _StatistikKehadiranChart(),
+          const SizedBox(height: 12),
+          _PieChartCard(distribusiData: distribusiKelas),
+        ],
+      );
+    }
+
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Expanded(flex: 2, child: _StatistikKehadiranChart()),
-        const SizedBox(width: 20),
+        const SizedBox(width: 12),
         Expanded(child: _PieChartCard(distribusiData: distribusiKelas)),
       ],
     );
   }
 }
 
-// =========================================================
-// GANTI BAGIAN INI (Line Chart)
-// =========================================================
+class _BottomSectionResponsive extends StatelessWidget {
+  final bool isMobile;
+  final List<Map<String, dynamic>> alerts;
+  final List<Map<String, dynamic>> activities;
+
+  const _BottomSectionResponsive({
+    required this.isMobile,
+    required this.alerts,
+    required this.activities,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isMobile) {
+      return Column(
+        children: [
+          _AlertsCard(alerts: alerts),
+          const SizedBox(height: 12),
+          _ActivityCard(activities: activities),
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 2, child: _AlertsCard(alerts: alerts)),
+        const SizedBox(width: 12),
+        Expanded(child: _ActivityCard(activities: activities)),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// CHARTS (pakai kode kamu, tapi dibikin lebih konsisten)
+// ============================================================================
 
 class _StatistikKehadiranChart extends StatefulWidget {
   const _StatistikKehadiranChart();
 
   @override
-  State<_StatistikKehadiranChart> createState() =>
-      _StatistikKehadiranChartState();
+  State<_StatistikKehadiranChart> createState() => _StatistikKehadiranChartState();
 }
 
 class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
   final SupabaseClient supabase = Supabase.instance.client;
 
-  int _selectedFilterIndex = 0; // 0: Hari Ini, 1: Minggu, 2: Bulan, 3: Periode
-  final List<String> _filters = [
-    'Hari Ini',
-    'Minggu Ini',
-    'Bulan Ini',
-    'Periode',
-  ];
+  int _selectedFilterIndex = 0;
+  final List<String> _filters = const ['Hari Ini', 'Minggu Ini', 'Bulan Ini', 'Periode'];
 
   bool _isLoading = true;
-  List<FlSpot> _spots = [];
-  Map<double, String> _bottomTitles = {};
+  List<FlSpot> _spots = const [];
+  Map<double, String> _bottomTitles = const {};
 
-  // Default nilai awal
   double _maxY = 10;
   double _minX = 0;
   double _maxX = 6;
@@ -890,48 +952,41 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
 
     try {
       String rpcName;
-      // Kita asumsikan RPC di database mengembalikan COUNT (jumlah orang), bukan rata-rata.
       switch (index) {
-        case 1: // Minggu
+        case 1:
           rpcName = 'get_statistik_mingguan';
           break;
-        case 2: // Bulan
+        case 2:
           rpcName = 'get_statistik_bulanan';
           break;
-        case 3: // Tahun
+        case 3:
           rpcName = 'get_statistik_tahunan';
           break;
-        case 0:
         default:
           rpcName = 'get_statistik_harian';
           break;
       }
 
-      // Memanggil RPC Supabase
       final List<dynamic> result = await supabase.rpc(rpcName);
 
-      List<FlSpot> spots = [];
-      Map<double, String> titles = {};
+      final List<FlSpot> spots = [];
+      final Map<double, String> titles = {};
       double i = 0;
       double maxVal = 0;
 
       if (result.isEmpty) {
-        // Data kosong
         spots.add(const FlSpot(0, 0));
         titles[0] = '-';
-        maxVal = 10; // Default skala kecil jika kosong
+        maxVal = 10;
         i = 1;
       } else {
-        // Proses data
-        for (var item in result) {
+        for (final item in result) {
           final label = item['label'].toString();
-          // Pastikan value dibaca sebagai double untuk koordinat grafik
           final value = double.tryParse(item['value'].toString()) ?? 0.0;
 
           spots.add(FlSpot(i, value));
           titles[i] = label;
 
-          // Cari nilai tertinggi untuk menentukan tinggi grafik
           if (value > maxVal) maxVal = value;
           i++;
         }
@@ -941,32 +996,24 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
         _spots = spots;
         _bottomTitles = titles;
         _minX = 0;
-        _maxX = i - 1; // Sumbu X sesuai jumlah data
-
-        // --- MODIFIKASI PENTING DISINI ---
-        // Jangan dipaksa 100. Kita buat dinamis berdasarkan data tertinggi (maxVal).
-        // Ditambah 20% (x 1.2) agar grafik tidak mentok di atap container.
+        _maxX = (i - 1).clamp(0, double.infinity);
         _maxY = (maxVal == 0) ? 10 : (maxVal * 1.2).ceilToDouble();
-
-        // Atur interval sumbu X agar label tidak bertumpuk jika datanya banyak
-        _intervalX = (i > 10) ? (i / 10).floorToDouble() : 1;
-
+        _intervalX = (i > 10) ? (i / 10).floorToDouble().clamp(1, 999) : 1;
         _isLoading = false;
       });
-    } catch (e) {
-      debugPrint('Error fetching chart data: $e');
+    } catch (_) {
       setState(() {
         _isLoading = false;
-        _spots = [const FlSpot(0, 0)];
+        _spots = const [FlSpot(0, 0)];
         _bottomTitles = {0: 'Err'};
         _minX = 0;
         _maxX = 0;
         _maxY = 10;
+        _intervalX = 1;
       });
     }
   }
 
-  // Fungsi untuk membuat tombol filter (Hari, Minggu, dll)
   List<Widget> _buildFilters() {
     return List.generate(
       _filters.length,
@@ -974,27 +1021,25 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
         padding: EdgeInsets.only(left: i > 0 ? 8 : 0),
         child: InkWell(
           onTap: () {
-            setState(() {
-              _selectedFilterIndex = i;
-            });
+            setState(() => _selectedFilterIndex = i);
             _fetchChartData(i);
           },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: i == _selectedFilterIndex
-                  ? const Color(0xFF42A5F5)
-                  : Colors.grey.shade100,
+              color: i == _selectedFilterIndex ? const Color(0xFF42A5F5) : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: i == _selectedFilterIndex ? const Color(0xFF42A5F5) : Colors.grey.shade200,
+              ),
             ),
             child: Text(
               _filters[i],
               style: TextStyle(
-                color: i == _selectedFilterIndex
-                    ? Colors.white
-                    : Colors.grey.shade600,
+                color: i == _selectedFilterIndex ? Colors.white : Colors.grey.shade700,
                 fontSize: 12,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -1003,12 +1048,7 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
     );
   }
 
-  // --- MODIFIKASI PENTING: FORMAT LABEL KIRI ---
-  String _getLeftTitle(double value) {
-    // Selalu kembalikan angka bulat (Integer)
-    // Tidak ada persen (%) sama sekali
-    return value.toInt().toString();
-  }
+  String _getLeftTitle(double v) => v.toInt().toString();
 
   @override
   Widget build(BuildContext context) {
@@ -1018,23 +1058,21 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
         children: [
           Row(
             children: [
-              const Icon(Icons.bar_chart_rounded), // Ganti icon biar fresh
+              const Icon(Icons.bar_chart_rounded, color: Color(0xFF42A5F5)),
               const SizedBox(width: 10),
-              const Text(
-                'Statistik Kehadiran',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              const Expanded(
+                child: Text(
+                  'Statistik Kehadiran',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
-              const SizedBox(width: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: _buildFilters()),
-              ),
+              SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: _buildFilters())),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 14),
           SizedBox(
-            height: 250,
+            height: 260,
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : LineChart(
@@ -1042,28 +1080,20 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
                       gridData: FlGridData(
                         show: true,
                         drawVerticalLine: false,
-                        // Interval garis horizontal dinamis (dibagi 5 step)
                         horizontalInterval: _maxY > 0 ? _maxY / 5 : 5,
-                        getDrawingHorizontalLine: (v) =>
-                            FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+                        getDrawingHorizontalLine: (v) => FlLine(color: Colors.grey.shade200, strokeWidth: 1),
                       ),
                       titlesData: FlTitlesData(
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            interval: _intervalX, // Interval dinamis
+                            interval: _intervalX,
                             getTitlesWidget: (value, meta) {
                               final title = _bottomTitles[value.toDouble()];
-                              if (title == null) return const SizedBox();
+                              if (title == null) return const SizedBox.shrink();
                               return Padding(
                                 padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  title,
-                                  style: const TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 10, // Font sedikit diperkecil
-                                  ),
-                                ),
+                                child: Text(title, style: const TextStyle(color: Colors.grey, fontSize: 10)),
                               );
                             },
                           ),
@@ -1071,30 +1101,22 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
                         leftTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            // Interval sumbu Y dinamis
                             interval: _maxY > 0 ? _maxY / 5 : 5,
-                            reservedSize: 35, // Space untuk angka
+                            reservedSize: 36,
                             getTitlesWidget: (v, _) => Text(
-                              _getLeftTitle(v), // Panggil fungsi label integer
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
+                              _getLeftTitle(v),
+                              style: const TextStyle(color: Colors.grey, fontSize: 11),
                             ),
                           ),
                         ),
-                        rightTitles: AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        topTitles: AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
+                        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                       ),
                       borderData: FlBorderData(show: false),
                       minX: _minX,
                       maxX: _maxX,
                       minY: 0,
-                      maxY: _maxY, // Menggunakan Max Y yang dinamis
+                      maxY: _maxY,
                       lineBarsData: [
                         LineChartBarData(
                           spots: _spots,
@@ -1103,38 +1125,30 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
                           barWidth: 3,
                           dotData: FlDotData(
                             show: true,
-                            getDotPainter: (_, __, ___, ____) =>
-                                FlDotCirclePainter(
-                                  radius: 4,
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                  strokeColor: const Color(0xFF42A5F5),
-                                ),
+                            getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                              radius: 4,
+                              color: Colors.white,
+                              strokeWidth: 2,
+                              strokeColor: const Color(0xFF42A5F5),
+                            ),
                           ),
                           belowBarData: BarAreaData(
                             show: true,
-                            color: const Color(0xFF42A5F5).withOpacity(0.1),
+                            color: const Color(0xFF42A5F5).withValues(alpha: 0.10),
                           ),
                         ),
                       ],
-                      // Tambahan: Tooltip agar saat disentuh keluar angkanya
                       lineTouchData: LineTouchData(
                         touchTooltipData: LineTouchTooltipData(
-                          // --- PERBAIKAN DISINI ---
-                          // Hapus 'tooltipBgColor' dan ganti dengan 'getTooltipColor'
-                          getTooltipColor: (touchedSpot) => Colors.blueAccent,
-
-                          getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                            return touchedBarSpots.map((barSpot) {
-                              return LineTooltipItem(
-                                '${barSpot.y.toInt()} Siswa', // Teks Tooltip
-                                const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
+                          getTooltipColor: (_) => Colors.blueAccent,
+                          getTooltipItems: (spots) => spots
+                              .map(
+                                (s) => LineTooltipItem(
+                                  '${s.y.toInt()} siswa',
+                                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                                 ),
-                              );
-                            }).toList();
-                          },
+                              )
+                              .toList(),
                         ),
                       ),
                     ),
@@ -1146,18 +1160,13 @@ class _StatistikKehadiranChartState extends State<_StatistikKehadiranChart> {
   }
 }
 
-// --- PIE CHART (BARU) ---
 class _PieChartCard extends StatelessWidget {
   final List<Map<String, dynamic>> distribusiData;
-
   const _PieChartCard({required this.distribusiData});
 
   @override
   Widget build(BuildContext context) {
-    final double totalSiswa = distribusiData.fold(
-      0.0,
-      (sum, item) => sum + (item['value'] as double),
-    );
+    final total = distribusiData.fold<double>(0.0, (sum, item) => sum + (item['value'] as double));
 
     return _WhiteCard(
       child: Column(
@@ -1165,103 +1174,72 @@ class _PieChartCard extends StatelessWidget {
         children: [
           Row(
             children: const [
-              Icon(Icons.pie_chart_outline),
+              Icon(Icons.pie_chart_outline, color: Color(0xFF42A5F5)),
               SizedBox(width: 10),
-              Text(
-                'Distribusi per Kelas',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              Text('Distribusi per Kelas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 14),
           SizedBox(
-            height: 200,
-            child: (totalSiswa == 0)
+            height: 210,
+            child: total == 0
                 ? Center(
-                    child: Text(
-                      'Belum ada data distribusi siswa',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
+                    child: Text('Belum ada data distribusi siswa', style: TextStyle(color: Colors.grey.shade600)),
                   )
                 : PieChart(
                     PieChartData(
                       sectionsSpace: 2,
-                      centerSpaceRadius: 50,
+                      centerSpaceRadius: 52,
                       sections: distribusiData.map((d) {
-                        final percent = (d['value'] / totalSiswa * 100);
+                        final v = d['value'] as double;
+                        final percent = (v / total * 100);
                         return PieChartSectionData(
-                          value: d['value'] as double,
+                          value: v,
                           color: d['color'] as Color,
-                          title: percent > 5
-                              ? '${percent.toStringAsFixed(0)}%'
-                              : '',
-                          radius: 60,
-                          titleStyle: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                          title: percent >= 7 ? '${percent.toStringAsFixed(0)}%' : '',
+                          radius: 62,
+                          titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
                         );
                       }).toList(),
                     ),
                   ),
           ),
-          const SizedBox(height: 20),
-          ...distribusiData.map(
-            (d) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: d['color'] as Color,
-                      shape: BoxShape.circle,
-                    ),
+          const SizedBox(height: 12),
+          ...distribusiData.take(8).map(
+                (d) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(color: d['color'] as Color, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          d['label'] as String,
+                          style: const TextStyle(fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '${(d['value'] as double).toInt()}',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    d['label'] as String,
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${(d['value'] as double).toInt()} siswa',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
         ],
       ),
     );
   }
 }
 
-// --- BAGIAN BAWAH (ALERTS & ACTIVITY) ---
-class _BottomSection extends StatelessWidget {
-  final List<Map<String, dynamic>> alerts;
-  final List<Map<String, dynamic>> activities;
-
-  const _BottomSection({required this.alerts, required this.activities});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(flex: 2, child: _AlertsCard(alerts: alerts)),
-        const SizedBox(width: 20),
-        Expanded(child: _ActivityCard(activities: activities)),
-      ],
-    );
-  }
-}
+// ============================================================================
+// MONITORING
+// ============================================================================
 
 class _AlertsCard extends StatelessWidget {
   final List<Map<String, dynamic>> alerts;
@@ -1275,21 +1253,13 @@ class _AlertsCard extends StatelessWidget {
         children: [
           Row(
             children: const [
-              Icon(Icons.notifications_outlined),
+              Icon(Icons.notifications_outlined, color: Color(0xFF42A5F5)),
               SizedBox(width: 10),
-              Text(
-                'Peringatan Sistem',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              Text('Peringatan Sistem', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ],
           ),
-          const SizedBox(height: 20),
-          ...alerts.map(
-            (a) => Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: _AlertItem(a),
-            ),
-          ),
+          const SizedBox(height: 14),
+          ...alerts.map((a) => Padding(padding: const EdgeInsets.only(bottom: 12), child: _AlertItem(a))),
         ],
       ),
     );
@@ -1302,40 +1272,29 @@ class _AlertItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Color c = data['color'] as Color;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: (data['color'] as Color).withOpacity(0.05),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: (data['color'] as Color).withOpacity(0.2)),
+        color: c.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: data['color'],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(data['icon'], color: Colors.white, size: 22),
+            decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(10)),
+            child: Icon(data['icon'] as IconData, color: Colors.white, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  data['title'],
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Text(data['title']?.toString() ?? '-', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(
-                  data['subtitle'],
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
+                Text(data['subtitle']?.toString() ?? '-', style: const TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
           ),
@@ -1352,7 +1311,7 @@ class _ActivityCard extends StatelessWidget {
   IconData _getIconForStatus(String? status) {
     switch (status?.toLowerCase()) {
       case 'hadir':
-      case 'pulang': // <-- Tambahkan 'pulang'
+      case 'pulang':
         return Icons.check_circle;
       case 'terlambat':
         return Icons.access_time;
@@ -1369,7 +1328,7 @@ class _ActivityCard extends StatelessWidget {
   Color _getColorForStatus(String? status) {
     switch (status?.toLowerCase()) {
       case 'hadir':
-      case 'pulang': // <-- Tambahkan 'pulang'
+      case 'pulang':
         return const Color(0xFF66BB6A);
       case 'terlambat':
         return const Color(0xFFFFA726);
@@ -1384,23 +1343,15 @@ class _ActivityCard extends StatelessWidget {
   }
 
   String _formatTimeAgo(String? isoString) {
-    if (isoString == null) return '';
-    try {
-      final dateTime = DateTime.parse(isoString).toLocal();
-      final difference = DateTime.now().difference(dateTime);
+    if (isoString == null) return '-';
+    final dt = DateTime.tryParse(isoString)?.toLocal();
+    if (dt == null) return '-';
 
-      if (difference.inMinutes < 1) {
-        return 'Baru saja';
-      } else if (difference.inMinutes < 60) {
-        return '${difference.inMinutes} menit yang lalu';
-      } else if (difference.inHours < 24) {
-        return '${difference.inHours} jam yang lalu';
-      } else {
-        return DateFormat('dd MMM yyyy, HH:mm').format(dateTime);
-      }
-    } catch (e) {
-      return '';
-    }
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Baru saja';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} menit lalu';
+    if (diff.inHours < 24) return '${diff.inHours} jam lalu';
+    return DateFormat('dd MMM yyyy, HH:mm').format(dt);
   }
 
   @override
@@ -1411,53 +1362,41 @@ class _ActivityCard extends StatelessWidget {
         children: [
           Row(
             children: const [
-              Icon(Icons.update),
+              Icon(Icons.update, color: Color(0xFF42A5F5)),
               SizedBox(width: 10),
-              Text(
-                'Aktivitas Terbaru',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              Text('Aktivitas Terbaru', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           if (activities.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Text(
-                  'Belum ada aktivitas hari ini',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 28),
+              child: Center(child: Text('Belum ada aktivitas hari ini', style: TextStyle(color: Colors.grey.shade600))),
             ),
           ...activities.map((a) {
             final status = a['status'] as String?;
-            final namaSiswa = (a['siswa'] is Map)
-                ? (a['siswa']['nama'] ?? 'Siswa tidak dikenal')
-                : 'Siswa tidak dikenal';
-            final waktuMasuk = a['waktu_masuk'] as String?;
-            final createdAt = a['created_at'] as String?;
+            final namaSiswa = (a['siswa'] is Map) ? (a['siswa']['nama'] ?? 'Siswa tidak dikenal') : 'Siswa tidak dikenal';
+            final waktuMasuk = a['waktu_masuk']?.toString();
+            final createdAt = a['created_at']?.toString();
 
-            final title =
-                '$namaSiswa ${status?.toLowerCase() ?? 'melakukan scan'}';
-            final subtitle =
-                'Scan pada ${waktuMasuk ?? (createdAt != null ? DateFormat("HH:mm").format(DateTime.parse(createdAt).toLocal()) : '')}';
-            final time = _formatTimeAgo(createdAt);
-            final icon = _getIconForStatus(status);
             final color = _getColorForStatus(status);
+            final icon = _getIconForStatus(status);
+
+            final timeLabel = waktuMasuk ??
+                (createdAt != null ? DateFormat("HH:mm").format(DateTime.parse(createdAt).toLocal()) : '-');
 
             return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.only(bottom: 12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      color: color.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(icon, color: color, size: 20),
+                    child: Icon(icon, color: color, size: 18),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1465,28 +1404,14 @@ class _ActivityCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          '$namaSiswa • ${status?.toLowerCase() ?? 'scan'}',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey,
-                          ),
-                        ),
+                        const SizedBox(height: 3),
+                        Text('Scan pada $timeLabel', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                         const SizedBox(height: 2),
-                        Text(
-                          time,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey,
-                          ),
-                        ),
+                        Text(_formatTimeAgo(createdAt), style: const TextStyle(fontSize: 11, color: Colors.grey)),
                       ],
                     ),
                   ),
@@ -1500,7 +1425,9 @@ class _ActivityCard extends StatelessWidget {
   }
 }
 
-// --- WIDGET DASAR (BASE CARD) ---
+// ============================================================================
+// BASE CARD
+// ============================================================================
 class _WhiteCard extends StatelessWidget {
   final Widget child;
   const _WhiteCard({required this.child});
@@ -1508,17 +1435,11 @@ class _WhiteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.grey.withValues(alpha: 0.08), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: child,
     );

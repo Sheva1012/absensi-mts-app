@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// Ganti 'main.dart' dengan path yang benar ke halaman dashboard Anda jika berbeda
-// import 'main.dart'; // Removed or update with the correct relative path if needed, e.g.:
-// import '../main.dart';
 
-// --- Konstanta untuk Warna dan Gaya ---
-// Memusatkan semua konstanta di satu tempat agar mudah diubah.
 class AppColors {
   static const Color primary = Color(0xFF1E88E5);
   static const Color background = Color(0xFFB3E5FC);
@@ -28,24 +23,15 @@ class AppStyles {
     fillColor: Colors.grey.shade100,
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: Color(0xFFB0BEC5), // abu netral untuk state normal
-        width: 1.2,
-      ),
+      borderSide: const BorderSide(color: Color(0xFFB0BEC5), width: 1.2),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: AppColors.primary, // biru saat fokus
-        width: 2,
-      ),
+      borderSide: const BorderSide(color: AppColors.primary, width: 2),
     ),
     errorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(
-        color: AppColors.error, // merah saat error
-        width: 1.5,
-      ),
+      borderSide: const BorderSide(color: AppColors.error, width: 1.5),
     ),
     focusedErrorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
@@ -55,7 +41,6 @@ class AppStyles {
   );
 }
 
-// --- Widget Login Screen ---
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -64,77 +49,63 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // GlobalKey untuk mengelola state dari Form.
   final _formKey = GlobalKey<FormState>();
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  // ✅ focus untuk pindah email -> password
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+
   bool _obscurePassword = true;
   bool _isLoading = false;
 
-  // Best practice: Selalu dispose controller untuk mencegah memory leaks.
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
-  /// Menampilkan SnackBar dengan pesan error.
-  /// Memisahkan logika UI seperti ini membuat kode lebih bersih.
   void _showErrorSnackBar(String message) {
-    // Pastikan widget masih ada sebelum menampilkan SnackBar.
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppColors.error),
     );
   }
 
-  /// Fungsi untuk menangani proses login.
   Future<void> _handleLogin() async {
-    // 1. Validasi semua TextFormField di dalam Form.
+    if (_isLoading) return; // ✅ cegah double submit via Enter spam
     final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) {
-      return; // Jika tidak valid, proses berhenti di sini.
-    }
+    if (!isValid) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    // ✅ tutup keyboard
+    FocusScope.of(context).unfocus();
+
+    setState(() => _isLoading = true);
 
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
-      // 2. Panggil Supabase Auth.
-      // Cukup panggil method signIn. Navigasi akan ditangani secara otomatis
-      // oleh listener yang akan kita pasang di main.dart.
       await Supabase.instance.client.auth.signInWithPassword(
         email: email,
         password: password,
       );
-
-      // 3. Navigasi tidak lagi diperlukan di sini.
-      // Listener onAuthStateChange akan menangani perpindahan halaman.
     } on AuthException catch (e) {
-      // 4. Tangani error otentikasi secara spesifik.
-      // Ini memberikan pesan yang lebih relevan kepada pengguna.
       if (e.statusCode == '400') {
         _showErrorSnackBar('Email atau password salah. Silakan coba lagi.');
       } else {
-        _showErrorSnackBar('Terjadi kesalahan jaringan: ${e.message}');
+        _showErrorSnackBar('Terjadi kesalahan: ${e.message}');
       }
-    } catch (e) {
-      // 5. Tangani error umum lainnya.
+    } catch (_) {
       _showErrorSnackBar('Terjadi kesalahan yang tidak terduga.');
     } finally {
-      // 6. Pastikan loading state selalu kembali ke false.
-      // Cek `context.mounted` sebelum setState.
       if (context.mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -147,10 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Latar belakang atas
           _buildTopBackground(),
-
-          // Kartu form login
           Align(
             alignment: Alignment.center,
             child: SingleChildScrollView(
@@ -167,27 +135,34 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(32.0),
-                    // Menggunakan Form widget
                     child: Form(
                       key: _formKey,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          // Email Input
+                          // ================= EMAIL =================
                           TextFormField(
                             controller: _emailController,
+                            focusNode: _emailFocus,
                             decoration: AppStyles.inputDecoration.copyWith(
                               labelText: 'Email',
                               hintText: 'contoh: guru@sekolah.id',
                               prefixIcon: const Icon(Icons.email_outlined),
                             ),
                             keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.username, AutofillHints.email],
+
+                            // ✅ Enter di email -> fokus ke password
+                            onFieldSubmitted: (_) {
+                              FocusScope.of(context).requestFocus(_passwordFocus);
+                            },
+
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Email tidak boleh kosong';
                               }
-                              if (!value.contains('@') ||
-                                  !value.contains('.')) {
+                              if (!value.contains('@') || !value.contains('.')) {
                                 return 'Format email tidak valid';
                               }
                               return null;
@@ -195,9 +170,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 20),
 
-                          // Password Input
+                          // ================= PASSWORD =================
                           TextFormField(
                             controller: _passwordController,
+                            focusNode: _passwordFocus,
                             obscureText: _obscurePassword,
                             decoration: AppStyles.inputDecoration.copyWith(
                               labelText: 'Password',
@@ -215,6 +191,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                 },
                               ),
                             ),
+                            textInputAction: TextInputAction.done,
+                            autofillHints: const [AutofillHints.password],
+
+                            // ✅ Enter di password -> otomatis login
+                            onFieldSubmitted: (_) => _handleLogin(),
+
+                            // (opsional) beberapa keyboard pakai ini
+                            onEditingComplete: _handleLogin,
+
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Password tidak boleh kosong';
@@ -227,7 +212,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 30),
 
-                          // Tombol Login
                           SizedBox(
                             width: double.infinity,
                             height: 50,
@@ -256,15 +240,12 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-
-          // Logo dan nama sekolah di bawah
           _buildSchoolBranding(),
         ],
       ),
     );
   }
 
-  // Widget-widget pembantu agar `build` method lebih rapi
   Widget _buildTopBackground() {
     return Positioned(
       top: 0,

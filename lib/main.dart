@@ -1,6 +1,11 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:window_manager/window_manager.dart';
+
 import 'web_admin/login.dart';
 import 'web_admin/dashboard.dart';
 import 'web_admin/placeholder.dart';
@@ -14,17 +19,48 @@ import 'web_admin/data_surat.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inisialisasi Supabase
   await Supabase.initialize(
     url: 'https://eachbhkjgadrpmrpbwat.supabase.co',
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2hiaGtqZ2FkcnBtcnBid2F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2Njk1MDEsImV4cCI6MjA3NTI0NTUwMX0.gZPdf88neU4yuLdKkUlTKNadpsRArxUp2IlQHk-XCrI',
   );
 
+  // Window Manager hanya untuk Desktop (bukan Web)
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    await windowManager.ensureInitialized();
+
+    const windowOptions = WindowOptions(
+      title: 'Absensi',
+      center: true,
+
+
+      minimumSize: Size(1100, 650),
+    );
+
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      // show + focus dulu
+      await windowManager.show();
+      await windowManager.focus();
+
+      // Delay sedikit supaya engine stabil (menghindari blank)
+      await Future.delayed(const Duration(milliseconds: 150));
+
+      // FULLSCREEN DENGAN BORDER = MAXIMIZE
+      await windowManager.maximize();
+
+      // kalau Windows kadang belum apply, paksa sekali lagi
+      await Future.delayed(const Duration(milliseconds: 150));
+      final isMax = await windowManager.isMaximized();
+      if (!isMax) {
+        await windowManager.maximize();
+      }
+    });
+  }
+
   runApp(const MyApp());
 }
 
-// BARU: Tambahkan Supabase client instance agar bisa diakses di seluruh file
+// Supabase client global
 final supabase = Supabase.instance.client;
 
 class MyApp extends StatelessWidget {
@@ -46,13 +82,11 @@ class MyApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('id', 'ID'), Locale('en', 'US')],
-      // DIUBAH: Menggunakan AuthStateListener untuk navigasi otomatis
       home: const AuthStateListener(),
     );
   }
 }
 
-// BARU: Widget yang mendengarkan status otentikasi
 class AuthStateListener extends StatelessWidget {
   const AuthStateListener({super.key});
 
@@ -61,7 +95,6 @@ class AuthStateListener extends StatelessWidget {
     return StreamBuilder<AuthState>(
       stream: supabase.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        // Tampilkan loading indicator selagi menunggu status pertama
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -69,13 +102,7 @@ class AuthStateListener extends StatelessWidget {
         }
 
         final session = snapshot.data?.session;
-        if (session != null) {
-          // Jika user sudah login, tampilkan halaman dashboard
-          return const AdminDashboardPage();
-        } else {
-          // Jika user belum login, tampilkan halaman login
-          return const LoginScreen();
-        }
+        return session != null ? const AdminDashboardPage() : const LoginScreen();
       },
     );
   }
@@ -94,10 +121,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
 
   void _navigateToSiswa(String kelasId) {
     setState(() {
-      // Buat ulang widget DataSiswaPage dengan ID kelas yang baru
       _widgetOptions[4] = DataSiswaPage(
         schoolName: 'MTs Sunan Gunung Jati',
-        initialKelasId: kelasId, // <-- Masukkan ID filter
+        initialKelasId: kelasId,
       );
       _selectedIndex = 4;
     });
@@ -105,7 +131,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
 
   void _onItemTapped(int index) async {
     if (index == 6) {
-      // Logout
       await supabase.auth.signOut();
       return;
     }
@@ -118,34 +143,29 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         );
         _selectedIndex = index;
       });
-    } else {
-      setState(() {
-        _selectedIndex = index;
-      });
+      return;
     }
+
+    setState(() => _selectedIndex = index);
   }
 
   @override
   void initState() {
     super.initState();
-    // KUNCI UTAMA 3: Inisialisasi widget dengan callback
     _widgetOptions = <Widget>[
-      const DashboardScreen(), // Index 0
-      const PageAbsensi(schoolName: 'MTs Sunan Gunung Jati'), // Index 1
-      const PageGuru(schoolName: 'MTs Sunan Gunung Jati'), // Index 2
-      // Hapus 'const' karena 'onViewSiswa' bukan nilai constant
+      const DashboardScreen(),
+      const PageAbsensi(schoolName: 'MTs Sunan Gunung Jati'),
+      const PageGuru(schoolName: 'MTs Sunan Gunung Jati'),
       PageKelas(
         schoolName: 'MTs Sunan Gunung Jati',
-        onViewSiswa: _navigateToSiswa, // <-- Kirim fungsi callback ke anak
-      ), // Index 3
-      // Hapus 'const' dan beri 'initialKelasId: null'
+        onViewSiswa: _navigateToSiswa,
+      ),
       const DataSiswaPage(
         schoolName: 'MTs Sunan Gunung Jati',
-        initialKelasId: null, // Awalnya tidak ada filter
-      ), // Index 4
-
-      const DataSuratPage(schoolName: 'MTs Sunan Gunung Jati'), // Index 5
-      Container(), // Index 6: Log Out
+        initialKelasId: null,
+      ),
+      const DataSuratPage(schoolName: 'MTs Sunan Gunung Jati'),
+      Container(),
     ];
   }
 
@@ -159,7 +179,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             child: Container(
               color: const Color(0xFFf5f7fa),
               child: _selectedIndex < _widgetOptions.length
-                  ? _widgetOptions[_selectedIndex] // Tampilkan halaman yang dipilih
+                  ? _widgetOptions[_selectedIndex]
                   : const PlaceholderScreen(title: 'Halaman Tidak Ditemukan'),
             ),
           ),
