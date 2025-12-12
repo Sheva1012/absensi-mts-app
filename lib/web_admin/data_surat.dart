@@ -1,6 +1,8 @@
 import 'dart:io';
-import 'dart:math'; // Wajib untuk logika pagination (min)
+import 'dart:math';
+import 'dart:async';
 import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,6 +13,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:universal_html/html.dart' as html;
+import 'package:archive/archive.dart';
 
 // Daftar Jenis Surat Dibatasi hanya Izin dan Sakit
 const List<String> jenisSuratList = ['izin', 'sakit'];
@@ -26,184 +29,464 @@ class DataSuratPage extends StatefulWidget {
 
 class _DataSuratPageState extends State<DataSuratPage> {
   final SupabaseClient supabase = Supabase.instance.client;
+
   bool isLoading = true;
+
+  // Data mentah dari Supabase (sudah ter-filter server-side: tanggal + jenis)
+  List<Map<String, dynamic>> _allSuratData = [];
+
+  // Data yang tampil (setelah filter client-side: search)
   List<Map<String, dynamic>> suratData = [];
 
-  // --- STATE PAGINATION BARU ---
+  // Pagination
   int _currentPage = 1;
-  int _rowsPerPage = 10; // Default show 10 data
-  // -----------------------------
+  int _rowsPerPage = 10;
 
-  // Filter States
-  String? selectedJenisSurat;
+  // Filter server-side
+  String? selectedJenisSurat; // nullable (null = semua)
   DateTime? selectedStartDate;
   DateTime? selectedEndDate;
+
+  // Search client-side
   final TextEditingController searchController = TextEditingController();
+  Timer? _searchDebounce;
+
+  // Date controller
+  late final TextEditingController _startDateCtrl;
+  late final TextEditingController _endDateCtrl;
+
+  static const String _bucketName = 'surat_keterangan';
 
   @override
   void initState() {
     super.initState();
     Intl.defaultLocale = 'id_ID';
+
+    _startDateCtrl = TextEditingController();
+    _endDateCtrl = TextEditingController();
+
+    searchController.addListener(_onSearchChanged);
     fetchSurat();
   }
 
-  /// 📥 Fetch Data Surat dari Supabase
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    searchController.removeListener(_onSearchChanged);
+    searchController.dispose();
+    _startDateCtrl.dispose();
+    _endDateCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      _applyClientSearchFilter(resetPage: true);
+    });
+  }
+
+  void _applyClientSearchFilter({bool resetPage = false}) {
+    final keyword = searchController.text.trim().toLowerCase();
+
+    final filtered = (keyword.isEmpty)
+        ? List<Map<String, dynamic>>.from(_allSuratData)
+        : _allSuratData.where((s) {
+            final nama = (s['siswa']?['nama'] ?? '').toString().toLowerCase();
+            return nama.contains(keyword);
+          }).toList();
+
+    setState(() {
+      suratData = filtered;
+      if (resetPage) _currentPage = 1;
+    });
+  }
+
+  void _syncDateControllers() {
+    _startDateCtrl.text = selectedStartDate == null
+        ? ''
+        : DateFormat('dd MMM yyyy').format(selectedStartDate!);
+    _endDateCtrl.text =
+        selectedEndDate == null ? '' : DateFormat('dd MMM yyyy').format(selectedEndDate!);
+  }
+
+  void _showSnackbar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Extract object path dari PUBLIC URL:
+  /// https://xxx.supabase.co/storage/v1/object/public/<bucket>/<objectPath>
+  String? _extractObjectPathFromPublicUrl({
+    required String fileUrl,
+    required String bucketName,
+  }) {
+    try {
+      final uri = Uri.parse(fileUrl);
+      final path = uri.path;
+      final marker = '/storage/v1/object/public/$bucketName/';
+      final idx = path.indexOf(marker);
+      if (idx == -1) return null;
+      return path.substring(idx + marker.length);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ========================== FETCH ==========================
   Future<void> fetchSurat() async {
     setState(() => isLoading = true);
+
     try {
-      var query = supabase.from('surat').select('*, siswa!inner(nama)');
+      var query = supabase.from('surat').select('*, siswa(nama)');
 
       if (selectedStartDate != null) {
-        query = query.gte(
-          'tanggal',
-          DateFormat('yyyy-MM-dd').format(selectedStartDate!),
-        );
+        query = query.gte('tanggal', DateFormat('yyyy-MM-dd').format(selectedStartDate!));
       }
       if (selectedEndDate != null) {
-        query = query.lte(
-          'tanggal',
-          DateFormat('yyyy-MM-dd').format(selectedEndDate!),
-        );
+        query = query.lte('tanggal', DateFormat('yyyy-MM-dd').format(selectedEndDate!));
       }
       if (selectedJenisSurat != null && selectedJenisSurat!.isNotEmpty) {
         query = query.eq('jenis', selectedJenisSurat!);
       }
 
       final response = await query.order('tanggal', ascending: false);
-      List<Map<String, dynamic>> allData = List<Map<String, dynamic>>.from(
-        response,
-      );
-
-      if (searchController.text.trim().isNotEmpty) {
-        String keyword = searchController.text.toLowerCase();
-        allData = allData
-            .where(
-              (s) => (s['siswa']?['nama'] ?? '')
-                  .toString()
-                  .toLowerCase()
-                  .contains(keyword),
-            )
-            .toList();
-      }
+      final allData = List<Map<String, dynamic>>.from(response);
 
       setState(() {
-        suratData = allData;
+        _allSuratData = allData;
+        _currentPage = 1;
         isLoading = false;
-        _currentPage = 1; // Reset ke halaman 1 setiap kali data berubah/filter
       });
-    } catch (e, stacktrace) {
-      print('==================================================');
-      print('❌ Error fetching surat: $e');
-      print('Stacktrace: $stacktrace');
-      print('==================================================');
 
+      _applyClientSearchFilter(resetPage: false);
+    } catch (e) {
       setState(() => isLoading = false);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Gagal memuat data surat. Cek log konsol untuk detail.',
-            ),
-          ),
-        );
+      _showSnackbar('Gagal memuat data surat: $e');
+    }
+  }
+
+  /// Ambil semua data surat untuk backup / delete global (tidak tergantung filter UI)
+  Future<List<Map<String, dynamic>>> _fetchAllSuratForGlobalAction() async {
+    final res = await supabase
+        .from('surat')
+        .select('id, siswa_id, tanggal, jenis, file_url')
+        .order('tanggal', ascending: false);
+    return List<Map<String, dynamic>>.from(res);
+  }
+
+  // ========================== BACKUP ZIP (WEB) ==========================
+  Future<void> _backupAllSuratToZipWeb() async {
+    if (!kIsWeb) {
+      _showSnackbar('Backup ZIP ini khusus untuk Web.');
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final data = await _fetchAllSuratForGlobalAction();
+      if (data.isEmpty) {
+        _showSnackbar('Tidak ada data surat untuk dibackup.');
+        return;
       }
+
+      _showSnackbar('Menyiapkan backup ZIP...');
+
+      final archive = Archive();
+      int added = 0;
+
+      for (final s in data) {
+        final url = (s['file_url'] ?? '').toString().trim();
+        if (url.isEmpty) continue;
+
+        final lower = url.toLowerCase();
+        final isImage = lower.endsWith('.jpg') ||
+            lower.endsWith('.jpeg') ||
+            lower.endsWith('.png') ||
+            lower.endsWith('.webp');
+        if (!isImage) continue;
+
+        final resp = await http.get(Uri.parse(url));
+        if (resp.statusCode != 200) continue;
+
+        final siswaId = (s['siswa_id'] ?? 'unknown').toString();
+        final tanggal = (s['tanggal'] ?? 'unknown').toString();
+        final jenis = (s['jenis'] ?? 'unknown').toString();
+        final ext = '.${lower.split('.').last}';
+
+        // rapi dalam zip
+        final filename = 'siswa_$siswaId/surat_${s['id']}_${jenis}_$tanggal$ext';
+
+        archive.addFile(ArchiveFile(filename, resp.bodyBytes.length, resp.bodyBytes));
+        added++;
+      }
+
+      if (added == 0) {
+        _showSnackbar('Tidak ada foto surat yang valid untuk dibackup.');
+        return;
+      }
+
+      final zipBytes = ZipEncoder().encode(archive);
+      if (zipBytes == null) {
+        _showSnackbar('Gagal membuat ZIP.');
+        return;
+      }
+
+      final blob = html.Blob([Uint8List.fromList(zipBytes)], 'application/zip');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+
+      final now = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      final zipName = 'backup_surat_$now.zip';
+
+      html.AnchorElement(href: url)
+        ..setAttribute('download', zipName)
+        ..click();
+
+      html.Url.revokeObjectUrl(url);
+      _showSnackbar('Backup berhasil: $zipName');
+    } catch (e) {
+      _showSnackbar('Backup gagal: $e');
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  void _showSnackbar(String message) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+  // ========================== HAPUS SEMUA (GLOBAL) ==========================
+  Future<void> _confirmDeleteAllGlobal() async {
+    if (!mounted) return;
+
+    setState(() => isLoading = true);
+
+    List<Map<String, dynamic>> all;
+    try {
+      all = await _fetchAllSuratForGlobalAction();
+    } catch (e) {
+      if (mounted) setState(() => isLoading = false);
+      _showSnackbar('Gagal memuat data surat: $e');
+      return;
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+
+    if (all.isEmpty) {
+      _showSnackbar('Tidak ada data surat untuk dihapus.');
+      return;
+    }
+
+    final int total = all.length;
+    final int withFile =
+        all.where((e) => (e['file_url'] ?? '').toString().trim().isNotEmpty).length;
+
+    final confirmCtrl = TextEditingController();
+    bool canDelete = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: const Text('⚠️ HAPUS SEMUA DATA SURAT'),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Tindakan ini akan menghapus SEMUA data surat (DB) dan file di Storage.',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 10),
+                    Text('• Total data: $total'),
+                    Text('• Dengan file: $withFile'),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Hapus bersifat PERMANEN dan tidak bisa dikembalikan.',
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Ketik "HAPUS SEMUA" untuk melanjutkan:',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: confirmCtrl,
+                      autofocus: true,
+                      onChanged: (v) {
+                        setLocal(() {
+                          canDelete = v.trim().toUpperCase() == 'HAPUS SEMUA';
+                        });
+                      },
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'HAPUS SEMUA',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Batal'),
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.backup),
+                  label: const Text('Backup ZIP'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _backupAllSuratToZipWeb();
+                  },
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.delete_forever),
+                  label: const Text('Hapus Permanen'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: canDelete
+                      ? () {
+                          Navigator.pop(ctx);
+                          _deleteAllSuratAndStorage(all);
+                        }
+                      : null,
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    confirmCtrl.dispose();
+  }
+
+  Future<void> _deleteAllSuratAndStorage(List<Map<String, dynamic>> items) async {
+    setState(() => isLoading = true);
+
+    int deletedFiles = 0;
+    int deletedRows = 0;
+    int failedFiles = 0;
+
+    try {
+      // === STORAGE ===
+      final paths = <String>[];
+      for (final s in items) {
+        final fileUrl = (s['file_url'] ?? '').toString().trim();
+        if (fileUrl.isEmpty) continue;
+
+        final path = _extractObjectPathFromPublicUrl(
+          fileUrl: fileUrl,
+          bucketName: _bucketName,
+        );
+        if (path != null) {
+          paths.add(path);
+        } else {
+          failedFiles++;
+        }
+      }
+
+      // hapus batch
+      for (int i = 0; i < paths.length; i += 100) {
+        final part = paths.sublist(i, min(i + 100, paths.length));
+        await supabase.storage.from(_bucketName).remove(part);
+        deletedFiles += part.length;
+      }
+
+      // === DB ===
+      final ids = items.map((e) => e['id']).toList();
+      for (int i = 0; i < ids.length; i += 200) {
+        final part = ids.sublist(i, min(i + 200, ids.length));
+        await supabase.from('surat').delete().inFilter('id', part);
+        deletedRows += part.length;
+      }
+
+      _showSnackbar('Selesai. DB: $deletedRows baris, Storage: $deletedFiles file, gagal-path: $failedFiles');
+      await fetchSurat();
+    } catch (e) {
+      _showSnackbar('Gagal menghapus data: $e');
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  /// 📤 Menangani Download/Konversi PDF
+  // ========================== DOWNLOAD (GAMBAR -> PDF) ==========================
   Future<void> _handleDownload(String fileUrl, String fileName) async {
     if (fileUrl.isEmpty) {
       _showSnackbar('URL file tidak tersedia.');
       return;
     }
 
-    final isImage =
-        fileUrl.toLowerCase().contains('.png') ||
-        fileUrl.toLowerCase().contains('.jpg') ||
-        fileUrl.toLowerCase().contains('.jpeg') ||
-        fileUrl.toLowerCase().contains('.webp');
+    final lower = fileUrl.toLowerCase();
+    final isImage = lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.webp');
 
     if (isImage) {
-      _showSnackbar('Mulai mengunduh dan mengkonversi gambar ke PDF...');
+      _showSnackbar('Mengunduh dan mengkonversi gambar ke PDF...');
       try {
         final response = await http.get(Uri.parse(fileUrl));
         if (response.statusCode != 200) {
-          _showSnackbar(
-            'Gagal mengambil file gambar. Status: ${response.statusCode}',
-          );
+          _showSnackbar('Gagal mengambil gambar. Status: ${response.statusCode}');
           return;
         }
+
         final imageBytes = response.bodyBytes;
         final pdf = pw.Document();
         final image = pw.MemoryImage(imageBytes);
+
         pdf.addPage(
           pw.Page(
             pageFormat: PdfPageFormat.a4,
-            build: (pw.Context context) {
-              return pw.Container(
-                alignment: pw.Alignment.center,
-                child: pw.Image(image),
-              );
-            },
+            build: (_) => pw.Center(child: pw.Image(image, fit: pw.BoxFit.contain)),
           ),
         );
+
         final Uint8List pdfBytes = await pdf.save();
         final finalFileName = '$fileName.pdf';
 
         if (kIsWeb) {
-          final blob = html.Blob([pdfBytes]);
+          final blob = html.Blob([pdfBytes], 'application/pdf');
           final url = html.Url.createObjectUrlFromBlob(blob);
           html.AnchorElement(href: url)
             ..setAttribute("download", finalFileName)
             ..click();
           html.Url.revokeObjectUrl(url);
-          _showSnackbar('PDF berhasil dibuat dan diunduh.');
+          _showSnackbar('PDF berhasil diunduh.');
         } else {
           final directory = await getApplicationDocumentsDirectory();
           final file = File('${directory.path}/$finalFileName');
           await file.writeAsBytes(pdfBytes);
-          final success = await launchUrl(Uri.file(file.path));
-          if (success) {
-            _showSnackbar('PDF berhasil dibuat. File dibuka: ${file.path}');
-          } else {
-            _showSnackbar('PDF berhasil dibuat, tetapi gagal dibuka.');
-          }
+
+          final ok = await launchUrl(Uri.file(file.path), mode: LaunchMode.externalApplication);
+          _showSnackbar(ok ? 'PDF dibuat dan dibuka.' : 'PDF dibuat, tapi gagal dibuka.');
         }
-      } catch (e, stacktrace) {
-        print('❌ Error: $e');
-        _showSnackbar('Gagal mengkonversi/mengunduh PDF. Cek log konsol.');
-      }
-    } else {
-      final Uri uri = Uri.parse(fileUrl);
-      if (!await canLaunchUrl(uri)) {
-        _showSnackbar('URL tidak valid atau browser tidak bisa dibuka.');
-        return;
-      }
-      try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        _showSnackbar('Membuka file asli...');
       } catch (e) {
-        _showSnackbar('Error saat membuka file: $e');
+        _showSnackbar('Gagal download/konversi: $e');
       }
+      return;
     }
+
+    // fallback: buka langsung
+    final uri = Uri.parse(fileUrl);
+    if (!await canLaunchUrl(uri)) {
+      _showSnackbar('URL tidak bisa dibuka.');
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  @override
-  void dispose() {
-    searchController.dispose();
-    super.dispose();
-  }
-
+  // ========================== UI ==========================
   @override
   Widget build(BuildContext context) {
+    _syncDateControllers();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: SingleChildScrollView(
@@ -215,9 +498,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
             const SizedBox(height: 28),
             _buildFilter(),
             const SizedBox(height: 20),
-            isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _buildTable(), // Memanggil method yang sudah dimodifikasi (Table + Pagination)
+            isLoading ? const Center(child: CircularProgressIndicator()) : _buildTable(),
           ],
         ),
       ),
@@ -228,9 +509,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue[700]!, Colors.blue[500]!],
-        ),
+        gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[500]!]),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -240,25 +519,23 @@ class _DataSuratPageState extends State<DataSuratPage> {
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        runAlignment: WrapAlignment.center,
+        spacing: 16,
+        runSpacing: 12,
         children: [
           const Text(
             'Data Surat Siswa',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.school, color: Colors.white),
               const SizedBox(width: 8),
-              Text(
-                widget.schoolName,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-              ),
+              Text(widget.schoolName, style: const TextStyle(color: Colors.white, fontSize: 16)),
             ],
           ),
         ],
@@ -287,20 +564,15 @@ class _DataSuratPageState extends State<DataSuratPage> {
             children: [
               Icon(Icons.filter_alt, color: Colors.blueAccent),
               SizedBox(width: 8),
-              Text(
-                "Filter Data Surat",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              Text("Filter Data Surat", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 16),
           Wrap(
             spacing: 16,
             runSpacing: 16,
-            crossAxisAlignment:
-                WrapCrossAlignment.center, // Agar sejajar vertikal
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              // --- 1. DROPDOWN SHOW (JUMLAH DATA) ---
               SizedBox(
                 width: 90,
                 child: DropdownButtonFormField<int>(
@@ -308,83 +580,68 @@ class _DataSuratPageState extends State<DataSuratPage> {
                   decoration: InputDecoration(
                     labelText: 'Show',
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  items: [5, 10, 20, 50]
-                      .map(
-                        (val) => DropdownMenuItem(
-                          value: val,
-                          child: Text(val.toString()),
-                        ),
-                      )
+                  items: const [5, 10, 20, 50]
+                      .map((val) => DropdownMenuItem(value: val, child: Text('$val')))
                       .toList(),
                   onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _rowsPerPage = val;
-                        _currentPage =
-                            1; // Reset ke halaman 1 jika limit berubah
-                      });
-                    }
+                    if (val == null) return;
+                    setState(() {
+                      _rowsPerPage = val;
+                      _currentPage = 1;
+                    });
                   },
                 ),
               ),
-
-              // --- Filter Tanggal & Jenis (Existing) ---
               SizedBox(
-                width: 220, // Sedikit dikecilkan agar muat
-                child: _buildDateFilter('Dari Tanggal', selectedStartDate, (
-                  date,
-                ) {
-                  setState(() {
-                    selectedStartDate = date;
-                  });
-                  fetchSurat();
-                }),
+                width: 220,
+                child: _buildDateFilter(
+                  label: 'Dari Tanggal',
+                  controller: _startDateCtrl,
+                  currentValue: selectedStartDate,
+                  onPicked: (date) {
+                    setState(() => selectedStartDate = date);
+                    fetchSurat();
+                  },
+                  onClear: () {
+                    setState(() => selectedStartDate = null);
+                    fetchSurat();
+                  },
+                ),
               ),
               SizedBox(
                 width: 220,
-                child: _buildDateFilter('Sampai Tanggal', selectedEndDate, (
-                  date,
-                ) {
-                  setState(() {
-                    selectedEndDate = date;
-                  });
-                  fetchSurat();
-                }),
+                child: _buildDateFilter(
+                  label: 'Sampai Tanggal',
+                  controller: _endDateCtrl,
+                  currentValue: selectedEndDate,
+                  onPicked: (date) {
+                    setState(() => selectedEndDate = date);
+                    fetchSurat();
+                  },
+                  onClear: () {
+                    setState(() => selectedEndDate = null);
+                    fetchSurat();
+                  },
+                ),
               ),
               SizedBox(
                 width: 220,
-                child: DropdownButtonFormField<String>(
+                child: DropdownButtonFormField<String?>(
                   value: selectedJenisSurat,
-                  hint: const Text("Pilih Jenis"),
                   items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text("Semua Jenis"),
-                    ),
-                    ...jenisSuratList.map(
-                      (jenis) =>
-                          DropdownMenuItem(value: jenis, child: Text(jenis)),
-                    ),
+                    const DropdownMenuItem<String?>(value: null, child: Text("Semua Jenis")),
+                    ...jenisSuratList.map((jenis) => DropdownMenuItem<String?>(value: jenis, child: Text(jenis))),
                   ],
                   onChanged: (value) {
-                    setState(() {
-                      selectedJenisSurat = value;
-                    });
+                    setState(() => selectedJenisSurat = value);
                     fetchSurat();
                   },
                   decoration: InputDecoration(
                     labelText: 'Jenis Surat',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
               ),
@@ -395,69 +652,73 @@ class _DataSuratPageState extends State<DataSuratPage> {
                   decoration: InputDecoration(
                     labelText: 'Cari Nama Siswa',
                     prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
-                  onChanged: (val) {
-                    fetchSurat();
-                  },
                 ),
               ),
             ],
+          ),
+          const Divider(height: 32),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: isLoading ? null : _backupAllSuratToZipWeb,
+                  icon: const Icon(Icons.backup),
+                  label: const Text('Backup ZIP'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: isLoading ? null : _confirmDeleteAllGlobal,
+                  icon: const Icon(Icons.delete_forever),
+                  label: const Text('Hapus Semua'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDateFilter(
-    String label,
-    DateTime? currentValue,
-    Function(DateTime?) onChanged,
-  ) {
+  Widget _buildDateFilter({
+    required String label,
+    required TextEditingController controller,
+    required DateTime? currentValue,
+    required ValueChanged<DateTime?> onPicked,
+    required VoidCallback onClear,
+  }) {
     return TextFormField(
       readOnly: true,
+      controller: controller,
       onTap: () async {
-        final DateTime? pickedDate = await showDatePicker(
+        final pickedDate = await showDatePicker(
           context: context,
           initialDate: currentValue ?? DateTime.now(),
           firstDate: DateTime(2000),
           lastDate: DateTime(2050),
         );
-        if (pickedDate != null) {
-          onChanged(pickedDate);
-        }
+        if (pickedDate != null) onPicked(pickedDate);
       },
-      controller: TextEditingController(
-        text: currentValue == null
-            ? ''
-            : DateFormat('dd MMM yyyy').format(currentValue),
-      ),
       decoration: InputDecoration(
         labelText: label,
         suffixIcon: IconButton(
           icon: Icon(currentValue == null ? Icons.calendar_today : Icons.clear),
-          onPressed: currentValue == null
-              ? null
-              : () {
-                  onChanged(null);
-                },
+          onPressed: currentValue == null ? null : onClear,
         ),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
     );
   }
 
-  // --- 2. LOGIKA PAGINATION & TABEL ---
   Widget _buildTable() {
     if (suratData.isEmpty) {
       return const Center(
@@ -468,11 +729,9 @@ class _DataSuratPageState extends State<DataSuratPage> {
       );
     }
 
-    // Logika Slicing Data
     final int startIndex = (_currentPage - 1) * _rowsPerPage;
     final int endIndex = min(startIndex + _rowsPerPage, suratData.length);
 
-    // Safety Check
     if (startIndex >= suratData.length && suratData.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         setState(() => _currentPage = 1);
@@ -480,12 +739,8 @@ class _DataSuratPageState extends State<DataSuratPage> {
       return const SizedBox.shrink();
     }
 
-    final List<Map<String, dynamic>> currentData = suratData.sublist(
-      startIndex,
-      suratData.isEmpty ? 0 : endIndex,
-    );
+    final currentData = suratData.sublist(startIndex, endIndex);
 
-    // Mengembalikan Column agar Pagination bisa ditaruh di bawah
     return Column(
       children: [
         Container(
@@ -504,7 +759,6 @@ class _DataSuratPageState extends State<DataSuratPage> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               double minTableWidth = constraints.maxWidth;
-              // Anti NaN fix
               if (!minTableWidth.isFinite) minTableWidth = 0.0;
 
               return SingleChildScrollView(
@@ -515,56 +769,21 @@ class _DataSuratPageState extends State<DataSuratPage> {
                     columnSpacing: 24,
                     headingRowHeight: 56,
                     dataRowHeight: 64,
-                    headingRowColor: MaterialStateProperty.all(
-                      Colors.blue.shade50,
-                    ),
+                    headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
                     columns: const [
-                      DataColumn(
-                        label: Text(
-                          'No', // Ubah ID Surat jadi No Urut
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'ID Siswa',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'Nama Siswa',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'Tanggal',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'Jenis Surat',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'Aksi',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
+                      DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('ID Siswa', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Nama Siswa', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Tanggal', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Jenis Surat', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
                     ],
                     rows: List.generate(currentData.length, (i) {
                       final s = currentData[i];
-                      final tanggal = s['tanggal'] != null
-                          ? DateFormat(
-                              'dd MMM yyyy',
-                            ).format(DateTime.parse(s['tanggal']))
-                          : '-';
-
-                      // Hitung nomor urut global
+                      final rawTanggal = s['tanggal'];
+                      final tanggal = rawTanggal == null
+                          ? '-'
+                          : DateFormat('dd MMM yyyy').format(DateTime.parse(rawTanggal.toString()).toLocal());
                       final int rowNumber = startIndex + i + 1;
 
                       return DataRow(
@@ -575,15 +794,11 @@ class _DataSuratPageState extends State<DataSuratPage> {
                           DataCell(Text(tanggal)),
                           DataCell(Text('${s['jenis'] ?? '-'}')),
                           DataCell(
-                            Row(
-                              children: [
-                                _buildAction(
-                                  Icons.visibility,
-                                  'Lihat',
-                                  Colors.green,
-                                  () => _showDetailDialog(s),
-                                ),
-                              ],
+                            _buildAction(
+                              Icons.visibility,
+                              'Lihat',
+                              Colors.green,
+                              () => _showDetailDialog(s),
                             ),
                           ),
                         ],
@@ -595,18 +810,13 @@ class _DataSuratPageState extends State<DataSuratPage> {
             },
           ),
         ),
-
         const SizedBox(height: 20),
-
-        // --- 3. TOMBOL PAGINATION ---
         _buildPaginationControls(),
-
-        const SizedBox(height: 50), // Jarak bawah aman
+        const SizedBox(height: 50),
       ],
     );
   }
 
-  /// Widget Kontrol Pagination di Kanan Bawah
   Widget _buildPaginationControls() {
     if (suratData.isEmpty) return const SizedBox.shrink();
 
@@ -615,173 +825,143 @@ class _DataSuratPageState extends State<DataSuratPage> {
     final int endItem = min(_currentPage * _rowsPerPage, suratData.length);
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.end, // Rata Kanan
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        // Info Data (Contoh: "1 - 10 dari 50")
         Text(
           "$startItem - $endItem dari ${suratData.length}",
-          style: const TextStyle(
-            color: Colors.grey,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w600),
         ),
         const SizedBox(width: 16),
-
-        // Tombol Previous
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: IconButton(
-            icon: const Icon(Icons.chevron_left),
-            tooltip: "Sebelumnya",
-            onPressed: _currentPage > 1
-                ? () {
-                    setState(() {
-                      _currentPage--;
-                    });
-                  }
-                : null,
-          ),
+        IconButton(
+          icon: const Icon(Icons.chevron_left),
+          onPressed: _currentPage > 1 ? () => setState(() => _currentPage--) : null,
         ),
-
-        const SizedBox(width: 8),
-
-        // Indikator Halaman (Kotak Biru)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.blue,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.blue.withOpacity(0.3),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+          decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(8)),
           child: Text(
             "$_currentPage",
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
-
-        const SizedBox(width: 8),
-
-        // Tombol Next
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: IconButton(
-            icon: const Icon(Icons.chevron_right),
-            tooltip: "Selanjutnya",
-            onPressed: _currentPage < totalPages
-                ? () {
-                    setState(() {
-                      _currentPage++;
-                    });
-                  }
-                : null,
-          ),
+        IconButton(
+          icon: const Icon(Icons.chevron_right),
+          onPressed: _currentPage < totalPages ? () => setState(() => _currentPage++) : null,
         ),
       ],
     );
   }
 
   void _showDetailDialog(Map<String, dynamic> surat) {
-    final String tanggal = surat['tanggal'] != null
-        ? DateFormat(
-            'EEEE, dd MMMM yyyy',
-          ).format(DateTime.parse(surat['tanggal']))
-        : '-';
+    final rawTanggal = surat['tanggal'];
+    final String tanggal = rawTanggal == null
+        ? '-'
+        : DateFormat('EEEE, dd MMMM yyyy').format(DateTime.parse(rawTanggal.toString()).toLocal());
 
-    final String fileUrl = surat['file_url'] ?? '';
-    final bool isDownloadable = fileUrl.isNotEmpty;
-    final String actionLabel = _getDownloadActionLabel(fileUrl);
-    final Color actionColor = fileUrl.toLowerCase().contains('.pdf')
-        ? Colors.red
-        : Colors.orange;
+    final String fileUrl = (surat['file_url'] ?? '').toString();
+    final bool hasFile = fileUrl.isNotEmpty;
 
     showDialog(
       context: context,
       builder: (context) {
+        final size = MediaQuery.of(context).size;
+
+        // target laptop 1920x1080
+        final double maxW = min(size.width * 0.9, 1400);
+        final double maxH = min(size.height * 0.75, 760);
+
         return AlertDialog(
           title: const Text('Detail Surat'),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: <Widget>[
-                _buildDetailRow('ID Surat:', surat['id'].toString()),
-                _buildDetailRow('ID Siswa:', surat['siswa_id'].toString()),
-                _buildDetailRow('Nama Siswa:', surat['siswa']?['nama'] ?? '-'),
-                _buildDetailRow('Tanggal:', tanggal),
-                _buildDetailRow('Jenis Surat:', surat['jenis'] ?? '-'),
-                _buildDetailRow('File URL:', fileUrl),
-                const SizedBox(height: 16),
-                const Text(
-                  'Aksi:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  onPressed: isDownloadable
-                      ? () {
-                          Navigator.of(
-                            context,
-                          ).pop(); // Tutup dialog sebelum download
-                          final filename =
-                              'surat_${surat['id'] ?? 'unknown'}_${surat['jenis'] ?? 'file'}';
-                          _handleDownload(
+          content: SizedBox(
+            width: maxW,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDetailRow('ID Surat:', '${surat['id'] ?? '-'}'),
+                  _buildDetailRow('ID Siswa:', '${surat['siswa_id'] ?? '-'}'),
+                  _buildDetailRow('Nama Siswa:', '${surat['siswa']?['nama'] ?? '-'}'),
+                  _buildDetailRow('Tanggal:', tanggal),
+                  _buildDetailRow('Jenis Surat:', '${surat['jenis'] ?? '-'}'),
+                  const SizedBox(height: 20),
+                  const Text('Preview Surat', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  if (!hasFile)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: const Text('Tidak ada foto surat.'),
+                    )
+                  else
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxW, maxHeight: maxH),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
                             fileUrl,
-                            filename,
-                          ); // Panggil fungsi download/konversi
-                        }
-                      : null,
-                  icon: const Icon(Icons.picture_as_pdf),
-                  label: Text(actionLabel),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: actionColor,
-                    foregroundColor: Colors.white,
+                            fit: BoxFit.contain,
+                            loadingBuilder: (c, child, progress) {
+                              if (progress == null) return child;
+                              return const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: CircularProgressIndicator(),
+                              );
+                            },
+                            errorBuilder: (c, e, s) => Container(
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.all(16),
+                              color: Colors.grey.shade100,
+                              child: const Text('Gagal memuat foto surat'),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Tutup'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: hasFile
+                        ? () {
+                            Navigator.of(context).pop();
+                            final filename = 'surat_${surat['id'] ?? 'file'}';
+                            _handleDownload(fileUrl, filename);
+                          }
+                        : null,
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
               ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Tutup'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
             ),
           ],
         );
       },
     );
-  }
-
-  String _getDownloadActionLabel(String fileUrl) {
-    final lowerUrl = fileUrl.toLowerCase();
-    if (lowerUrl.isEmpty) {
-      return 'File Tidak Tersedia';
-    } else if (lowerUrl.contains('.png') ||
-        lowerUrl.contains('.jpg') ||
-        lowerUrl.contains('.jpeg')) {
-      return 'Konversi & Download PDF (dari Gambar)';
-    } else if (lowerUrl.contains('.pdf')) {
-      return 'Download PDF Asli';
-    } else {
-      return 'Download File Asli';
-    }
   }
 
   Widget _buildDetailRow(String label, String value) {
@@ -790,13 +970,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
+          SizedBox(width: 110, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold))),
           Expanded(child: Text(value)),
         ],
       ),
@@ -818,10 +992,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       icon: Icon(icon, size: 16),
-      label: Text(
-        label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
+      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
       onPressed: onPressed,
     );
   }
