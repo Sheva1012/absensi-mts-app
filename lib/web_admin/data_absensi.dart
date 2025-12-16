@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'absensi_controller.dart'; 
+import 'absensi_controller.dart';
 
 class PageAbsensi extends StatelessWidget {
   final String schoolName;
@@ -445,6 +445,7 @@ class _AbsensiContent extends StatelessWidget {
     final int totalData = controller.totalRows;
     final int current = controller.currentPage;
     final int limit = controller.itemLimit;
+
     final int startItem = totalData == 0 ? 0 : ((current - 1) * limit) + 1;
     final int endItem = (current * limit) > totalData
         ? totalData
@@ -453,6 +454,46 @@ class _AbsensiContent extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        // Rows per page selector
+        Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const Text(
+                "Rows:",
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: controller.itemLimit,
+                  icon: const Icon(Icons.arrow_drop_down),
+                  items: const [5, 10, 20, 50, 100]
+                      .map(
+                        (val) => DropdownMenuItem<int>(
+                          value: val,
+                          child: Text("$val"),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) => controller.updateLimit(val),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(width: 16),
+
         Text(
           "$startItem - $endItem dari $totalData",
           style: const TextStyle(
@@ -461,11 +502,13 @@ class _AbsensiContent extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 16),
+
         _pageButton(
           Icons.chevron_left,
           current > 1 ? controller.prevPage : null,
         ),
         const SizedBox(width: 8),
+
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
@@ -488,7 +531,9 @@ class _AbsensiContent extends StatelessWidget {
             ),
           ),
         ),
+
         const SizedBox(width: 8),
+
         _pageButton(
           Icons.chevron_right,
           current < controller.totalPages ? controller.nextPage : null,
@@ -583,12 +628,22 @@ class _AbsensiTable extends StatelessWidget {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
+                  DataColumn(
+                    label: Text(
+                      'Diperbarui Oleh',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ],
                 rows: List.generate(displayData.length, (index) {
                   final row = displayData[index];
                   final siswa = row['siswa'] ?? {};
                   final nama = siswa['nama'] ?? '-';
                   final status = row['status'] ?? 'alfa';
+                  final guru = row['guru'];
+                  final diperbaruiOleh = (guru != null && guru['nama'] != null)
+                      ? guru['nama']
+                      : '-';
 
                   return DataRow(
                     cells: [
@@ -607,6 +662,9 @@ class _AbsensiTable extends StatelessWidget {
                           row['keterangan'] ?? '-',
                           overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                      DataCell(
+                        Text(diperbaruiOleh, overflow: TextOverflow.ellipsis),
                       ),
                     ],
                   );

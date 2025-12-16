@@ -69,8 +69,10 @@ class AbsensiController extends ChangeNotifier {
       var query = supabase
           .from('absensi')
           .select(
-            '*, siswa!inner(nama, kelas_id, nis)',
-          ) // Hapus FetchOptions di sini
+            'id, tanggal, status, waktu_masuk, waktu_pulang, keterangan, updated_by, '
+            'siswa!inner(nama, kelas_id, nis), '
+            'guru:updated_by(nama)',
+          )
           .eq('tanggal', dateStr);
 
       // 2. Tambahkan Filter Kelas (Jika ada)
@@ -396,12 +398,14 @@ class AbsensiController extends ChangeNotifier {
     }
   }
 
-  void updateLimit(int? val) {
-    if (val != null) {
-      itemLimit = val;
-      currentPage = 1;
-      fetchData();
-    }
+  Future<void> updateLimit(int? val) async {
+    if (val == null || val == itemLimit) return;
+
+    itemLimit = val;
+    currentPage = 1;
+    notifyListeners();
+
+    await fetchData();
   }
 
   void onKelasSelected(int? val) {
