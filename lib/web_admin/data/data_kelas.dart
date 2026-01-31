@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'kelas_logic.dart'; // <- Import file logika yang baru
-// import 'data_siswa.dart'; // Anda mungkin masih memerlukan ini jika onViewSiswa menggunakannya
+import '../logic/kelas_logic.dart'; // Pastikan file ini ada di folder yang sama
 
 class PageKelas extends StatefulWidget {
   final String schoolName;
@@ -17,12 +16,14 @@ class PageKelas extends StatefulWidget {
 }
 
 class _PageKelasState extends State<PageKelas> {
+  // Inisialisasi Logic
   late final PageKelasLogic _logic;
 
   @override
   void initState() {
     super.initState();
     _logic = PageKelasLogic();
+    // Dengarkan perubahan data dari logic agar UI update otomatis
     _logic.addListener(_onLogicUpdate);
     _logic.fetchData();
   }
@@ -40,23 +41,26 @@ class _PageKelasState extends State<PageKelas> {
     super.dispose();
   }
 
-  // --- LOGIKA UI (Event Handling) ---
+  // --- LOGIKA UI (Dialog Handling) ---
 
   void _showAddDialog() {
-    _showUpsertDialog(null); // Panggil dialog dengan data 'kelas' null
+    _showUpsertDialog(null);
   }
 
   void _showUpsertDialog(Map<String, dynamic>? kelas) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
         return _UpsertKelasDialog(
-          kelas: kelas, // Kirim null jika 'Tambah', kirim data jika 'Edit'
+          kelas: kelas,
+          // Ambil data guru dari logic yang sudah di-fetch
           guruData: _logic.guruData,
           onSave: (nama, jamMasuk, jamPulang, waliId) async {
             final String? error;
+
+            // Panggil fungsi logic berdasarkan kondisi (Tambah/Edit)
             if (kelas == null) {
-              // Mode TAMBAH
               error = await _logic.createKelas(
                 nama,
                 jamMasuk,
@@ -64,7 +68,6 @@ class _PageKelasState extends State<PageKelas> {
                 waliId,
               );
             } else {
-              // Mode EDIT
               error = await _logic.updateKelas(
                 kelas,
                 nama,
@@ -74,10 +77,10 @@ class _PageKelasState extends State<PageKelas> {
               );
             }
 
-            if (!mounted) return; // Pastikan widget masih ada
+            if (!mounted) return;
             Navigator.pop(context); // Tutup dialog
 
-            // Tampilkan Snackbar berdasarkan hasil
+            // Tampilkan Feedback Snackbar
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
@@ -106,18 +109,20 @@ class _PageKelasState extends State<PageKelas> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Header (Tombol 'Tambah' dihapus dari sini)
+            // 1. Header
             _KelasHeader(schoolName: widget.schoolName),
-            const SizedBox(height: 28), // Spasi setelah header
-            // 2. Tombol 'Tambah Kelas' DITEMPATKAN DI SINI
+
+            const SizedBox(height: 28),
+
+            // 2. Tombol 'Tambah Kelas'
             Container(
-              alignment: Alignment.centerRight, // Posisikan tombol di kanan
-              margin: const EdgeInsets.only(bottom: 20), // Beri spasi bawah
+              alignment: Alignment.centerRight,
+              margin: const EdgeInsets.only(bottom: 20),
               child: ElevatedButton.icon(
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Tambah Kelas'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[700], // Samakan dengan header
+                  backgroundColor: Colors.blue[700],
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -127,22 +132,18 @@ class _PageKelasState extends State<PageKelas> {
                     vertical: 16,
                   ),
                 ),
-                onPressed: _showAddDialog, // Panggil fungsi tambah
+                onPressed: _showAddDialog,
               ),
             ),
 
-            // 3. Konten Tabel
+            // 3. Konten Tabel (Loading State di-handle logic)
             _logic.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _KelasDataTable(
                     kelasData: _logic.kelasData,
                     guruData: _logic.guruData,
-                    onEdit: (kelas) {
-                      _showUpsertDialog(kelas); // Panggil dialog edit
-                    },
-                    onView: (kelasId) {
-                      widget.onViewSiswa(kelasId);
-                    },
+                    onEdit: (kelas) => _showUpsertDialog(kelas),
+                    onView: (kelasId) => widget.onViewSiswa(kelasId),
                   ),
           ],
         ),
@@ -152,18 +153,13 @@ class _PageKelasState extends State<PageKelas> {
 }
 
 // =========================================================================
-// WIDGET-WIDGET YANG DIEKSTRAK
+// WIDGET-WIDGET UI (TAMPILAN DIPERTAHANKAN)
 // =========================================================================
 
-// 1. WIDGET HEADER (DIUBAH)
 class _KelasHeader extends StatelessWidget {
   final String schoolName;
-  // final VoidCallback onAddKelas; // <-- DIHAPUS
 
-  const _KelasHeader({
-    required this.schoolName,
-    // required this.onAddKelas, // <-- DIHAPUS
-  });
+  const _KelasHeader({required this.schoolName});
 
   @override
   Widget build(BuildContext context) {
@@ -193,7 +189,6 @@ class _KelasHeader extends StatelessWidget {
               color: Colors.white,
             ),
           ),
-          // DIUBAH: Kembalikan seperti semula (hanya nama sekolah)
           Row(
             children: [
               const Icon(Icons.school, color: Colors.white),
@@ -210,7 +205,6 @@ class _KelasHeader extends StatelessWidget {
   }
 }
 
-// 2. WIDGET TABEL DATA (Tidak Berubah)
 class _KelasDataTable extends StatelessWidget {
   final List<Map<String, dynamic>> kelasData;
   final List<Map<String, dynamic>> guruData;
@@ -235,7 +229,7 @@ class _KelasDataTable extends StatelessWidget {
       );
     }
 
-    final ScrollController _horizontalController = ScrollController();
+    final ScrollController horizontalController = ScrollController();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -250,195 +244,172 @@ class _KelasDataTable extends StatelessWidget {
           ),
         ],
       ),
-      // MENGGUNAKAN LAYOUTBUILDER DI SINI
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Mengambil lebar maksimal container yang tersedia
           final double minTableWidth = constraints.maxWidth;
 
           return Scrollbar(
-            controller: _horizontalController,
+            controller: horizontalController,
             thumbVisibility: true,
             trackVisibility: true,
             scrollbarOrientation: ScrollbarOrientation.bottom,
             child: SingleChildScrollView(
-              controller: _horizontalController,
+              controller: horizontalController,
               scrollDirection: Axis.horizontal,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: ConstrainedBox(
-                  // UBAH: minWidth diset mengikuti constraints.maxWidth
-                  // Agar tabel mengisi penuh layar kanan-kiri
-                  constraints: BoxConstraints(minWidth: minTableWidth),
-                  child: DataTable(
-                    columnSpacing: 12,
-                    headingRowHeight: 50,
-                    dataRowHeight: 60,
-                    headingRowColor: MaterialStateProperty.all(
-                      Colors.blue.shade50,
-                    ),
-
-                    // --- BAGIAN HEADER (COLUMNS) ---
-                    columns: const [
-                      DataColumn(
-                        label: SizedBox(
-                          width: 40,
-                          child: Center(
-                            child: Text(
-                              'ID',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 100,
-                          child: Center(
-                            child: Text(
-                              'Nama Kelas',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 150,
-                          child: Center(
-                            child: Text(
-                              'Wali Kelas',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 90,
-                          child: Center(
-                            child: Text(
-                              'Jam Masuk',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 90,
-                          child: Center(
-                            child: Text(
-                              'Jam Pulang',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: SizedBox(
-                          width: 160,
-                          child: Center(
-                            child: Text(
-                              'Aksi',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    // --- BAGIAN ISI DATA (ROWS) ---
-                    rows: List.generate(kelasData.length, (i) {
-                      final s = kelasData[i];
-                      final waliNama = s['wali_nama'] ?? '-';
-
-                      return DataRow(
-                        cells: [
-                          // SEL 1: ID
-                          DataCell(
-                            SizedBox(
-                              width: 40,
-                              child: Center(child: Text(s['id'].toString())),
-                            ),
-                          ),
-
-                          // SEL 2: NAMA KELAS
-                          DataCell(
-                            SizedBox(
-                              width: 100,
-                              child: Center(
-                                child: Text(
-                                  s['nama_kelas'] ?? '-',
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // SEL 3: WALI KELAS
-                          DataCell(
-                            SizedBox(
-                              width: 150,
-                              child: Center(
-                                child: Text(
-                                  waliNama,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // SEL 4: JAM MASUK
-                          DataCell(
-                            SizedBox(
-                              width: 90,
-                              child: Center(child: Text(s['jam_masuk'] ?? '-')),
-                            ),
-                          ),
-
-                          // SEL 5: JAM PULANG
-                          DataCell(
-                            SizedBox(
-                              width: 90,
-                              child: Center(
-                                child: Text(s['jam_pulang'] ?? '-'),
-                              ),
-                            ),
-                          ),
-
-                          // SEL 6: AKSI
-                          DataCell(
-                            SizedBox(
-                              width: 160,
-                              child: Center(
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    _buildAction(
-                                      Icons.edit,
-                                      'Edit',
-                                      Colors.blue,
-                                      () => onEdit(s),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _buildAction(
-                                      Icons.visibility,
-                                      'Lihat',
-                                      Colors.green,
-                                      () => onView(s['id'].toString()),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: minTableWidth),
+                child: DataTable(
+                  columnSpacing: 12,
+                  headingRowHeight: 50,
+                  dataRowHeight: 60,
+                  headingRowColor: MaterialStateProperty.all(
+                    Colors.blue.shade50,
                   ),
+                  columns: const [
+                    DataColumn(
+                      label: SizedBox(
+                        width: 40,
+                        child: Center(
+                          child: Text(
+                            'ID',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: SizedBox(
+                        width: 100,
+                        child: Center(
+                          child: Text(
+                            'Nama Kelas',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: SizedBox(
+                        width: 150,
+                        child: Center(
+                          child: Text(
+                            'Wali Kelas',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: SizedBox(
+                        width: 90,
+                        child: Center(
+                          child: Text(
+                            'Jam Masuk',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: SizedBox(
+                        width: 90,
+                        child: Center(
+                          child: Text(
+                            'Jam Pulang',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: SizedBox(
+                        width: 160,
+                        child: Center(
+                          child: Text(
+                            'Aksi',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  rows: List.generate(kelasData.length, (i) {
+                    final s = kelasData[i];
+                    // Logic Wali Nama sudah di-handle di kelas_logic.dart
+                    final waliNama = s['wali_nama'] ?? '-';
+
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          SizedBox(
+                            width: 40,
+                            child: Center(child: Text(s['id'].toString())),
+                          ),
+                        ),
+                        DataCell(
+                          SizedBox(
+                            width: 100,
+                            child: Center(
+                              child: Text(
+                                s['nama_kelas'] ?? '-',
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          SizedBox(
+                            width: 150,
+                            child: Center(
+                              child: Text(
+                                waliNama,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          SizedBox(
+                            width: 90,
+                            child: Center(child: Text(s['jam_masuk'] ?? '-')),
+                          ),
+                        ),
+                        DataCell(
+                          SizedBox(
+                            width: 90,
+                            child: Center(child: Text(s['jam_pulang'] ?? '-')),
+                          ),
+                        ),
+                        DataCell(
+                          SizedBox(
+                            width: 160,
+                            child: Center(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _buildAction(
+                                    Icons.edit,
+                                    'Edit',
+                                    Colors.blue,
+                                    () => onEdit(s),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _buildAction(
+                                    Icons.visibility,
+                                    'Lihat',
+                                    Colors.green,
+                                    () => onView(s['id'].toString()),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
                 ),
               ),
             ),
@@ -472,10 +443,8 @@ class _KelasDataTable extends StatelessWidget {
   }
 }
 
-// 3. WIDGET DIALOG (Tidak Berubah)
 class _UpsertKelasDialog extends StatefulWidget {
-  final Map<String, dynamic>?
-  kelas; // BARU: 'kelas' bisa null (untuk mode Tambah)
+  final Map<String, dynamic>? kelas;
   final List<Map<String, dynamic>> guruData;
   final Future<void> Function(
     String nama,
@@ -614,7 +583,7 @@ class _UpsertKelasDialogState extends State<_UpsertKelasDialog> {
               ),
               items: widget.guruData.map((g) {
                 return DropdownMenuItem<String>(
-                  value: g['id'],
+                  value: g['id'].toString(),
                   child: Text(g['nama']),
                 );
               }).toList(),
