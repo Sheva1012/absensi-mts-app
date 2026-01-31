@@ -5,63 +5,61 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
+import 'web_admin/core/constants.dart';
 
 import 'web_admin/login.dart';
 import 'web_admin/dashboard.dart';
-import 'web_admin/placeholder.dart';
 import 'web_admin/sidebar.dart';
-import 'web_admin/data_kelas.dart';
-import 'web_admin/data_guru.dart';
-import 'web_admin/data_siswa.dart';
-import 'web_admin/data_absensi.dart';
-import 'web_admin/data_surat.dart';
+import 'web_admin/data/data_kelas.dart';
+import 'web_admin/data/data_guru.dart';
+import 'web_admin/data/data_siswa.dart';
+import 'web_admin/data/data_absensi.dart';
+import 'web_admin/data/data_surat.dart';
+import 'web_admin/placeholder.dart';
+
+final supabase = Supabase.instance.client;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 1. Initialize Supabase 
   await Supabase.initialize(
-    url: 'https://eachbhkjgadrpmrpbwat.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2hiaGtqZ2FkcnBtcnBid2F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2Njk1MDEsImV4cCI6MjA3NTI0NTUwMX0.gZPdf88neU4yuLdKkUlTKNadpsRArxUp2IlQHk-XCrI',
+    url: AppConstants.supabaseUrl, 
+    anonKey: AppConstants.supabaseAnonKey, 
   );
 
-  // Window Manager hanya untuk Desktop (bukan Web)
+  // 2. Setup Desktop
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-    await windowManager.ensureInitialized();
-
-    const windowOptions = WindowOptions(
-      title: 'Absensi',
-      center: true,
-
-
-      minimumSize: Size(1100, 650),
-    );
-
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      // show + focus dulu
-      await windowManager.show();
-      await windowManager.focus();
-
-      // Delay sedikit supaya engine stabil (menghindari blank)
-      await Future.delayed(const Duration(milliseconds: 150));
-
-      // FULLSCREEN DENGAN BORDER = MAXIMIZE
-      await windowManager.maximize();
-
-      // kalau Windows kadang belum apply, paksa sekali lagi
-      await Future.delayed(const Duration(milliseconds: 150));
-      final isMax = await windowManager.isMaximized();
-      if (!isMax) {
-        await windowManager.maximize();
-      }
-    });
+    await _setupDesktopWindow();
   }
 
   runApp(const MyApp());
 }
 
-// Supabase client global
-final supabase = Supabase.instance.client;
+Future<void> _setupDesktopWindow() async {
+  await windowManager.ensureInitialized();
+
+  const windowOptions = WindowOptions(
+    // Menggunakan variabel nama sekolah
+    title: 'Absensi ${AppConstants.schoolName}',
+    center: true,
+    minimumSize: Size(1100, 650),
+    skipTaskbar: false,
+    titleBarStyle: TitleBarStyle.normal,
+  );
+
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+    await Future.delayed(const Duration(milliseconds: 150));
+    await windowManager.maximize();
+
+    final isMax = await windowManager.isMaximized();
+    if (!isMax) {
+      await windowManager.maximize();
+    }
+  });
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -69,12 +67,14 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Aplikasi Admin Sekolah',
+      // Menggunakan variabel nama sekolah
+      title: 'Admin ${AppConstants.schoolName}',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
+        fontFamily: 'Poppins',
+        useMaterial3: true,
         visualDensity: VisualDensity.adaptivePlatformDensity,
-        fontFamily: 'Segoe UI',
       ),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
@@ -82,13 +82,13 @@ class MyApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('id', 'ID'), Locale('en', 'US')],
-      home: const AuthStateListener(),
+      home: const AuthGate(),
     );
   }
 }
 
-class AuthStateListener extends StatelessWidget {
-  const AuthStateListener({super.key});
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -100,9 +100,10 @@ class AuthStateListener extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-
         final session = snapshot.data?.session;
-        return session != null ? const AdminDashboardPage() : const LoginScreen();
+        return session != null
+            ? const AdminDashboardPage()
+            : const LoginScreen();
       },
     );
   }
@@ -117,70 +118,74 @@ class AdminDashboardPage extends StatefulWidget {
 
 class _AdminDashboardPageState extends State<AdminDashboardPage> {
   int _selectedIndex = 0;
-  late List<Widget> _widgetOptions;
+  String? _selectedKelasId;
 
-  void _navigateToSiswa(String kelasId) {
-    setState(() {
-      _widgetOptions[4] = DataSiswaPage(
-        schoolName: 'MTs Sunan Gunung Jati',
-        initialKelasId: kelasId,
-      );
-      _selectedIndex = 4;
-    });
-  }
-
-  void _onItemTapped(int index) async {
+  void _onMenuSelected(int index) async {
     if (index == 6) {
       await supabase.auth.signOut();
       return;
     }
-
-    if (index == 4) {
-      setState(() {
-        _widgetOptions[4] = const DataSiswaPage(
-          schoolName: 'MTs Sunan Gunung Jati',
-          initialKelasId: null,
-        );
-        _selectedIndex = index;
-      });
-      return;
-    }
-
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      if (index != 4) {
+        _selectedKelasId = null;
+      }
+    });
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _widgetOptions = <Widget>[
-      const DashboardScreen(),
-      const PageAbsensi(schoolName: 'MTs Sunan Gunung Jati'),
-      const PageGuru(schoolName: 'MTs Sunan Gunung Jati'),
-      PageKelas(
-        schoolName: 'MTs Sunan Gunung Jati',
-        onViewSiswa: _navigateToSiswa,
-      ),
-      const DataSiswaPage(
-        schoolName: 'MTs Sunan Gunung Jati',
-        initialKelasId: null,
-      ),
-      const DataSuratPage(schoolName: 'MTs Sunan Gunung Jati'),
-      Container(),
-    ];
+  void _navigateToSiswaPerKelas(String kelasId) {
+    setState(() {
+      _selectedKelasId = kelasId;
+      _selectedIndex = 4;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Mapping halaman menggunakan Constants untuk nama sekolah
+    final List<Widget> pages = [
+      const DashboardScreen(),
+      const PageAbsensi(
+        schoolName: AppConstants.schoolName,
+      ),
+      const PageGuru(
+        schoolName: AppConstants.schoolName,
+      ),
+      PageKelas(
+        schoolName: AppConstants.schoolName,
+        onViewSiswa: _navigateToSiswaPerKelas,
+      ),
+      DataSiswaPage(
+        schoolName: AppConstants.schoolName,
+        initialKelasId: _selectedKelasId,
+      ),
+      const DataSuratPage(
+        schoolName: AppConstants.schoolName,
+      ),
+      const SizedBox(),
+    ];
+
+    final Widget content = (_selectedIndex < pages.length)
+        ? pages[_selectedIndex]
+        : const PlaceholderScreen(title: 'Halaman Tidak Ditemukan');
+
     return Scaffold(
       body: Row(
         children: [
-          Sidebar(selectedIndex: _selectedIndex, onMenuSelected: _onItemTapped),
+          Sidebar(
+            selectedIndex: _selectedIndex,
+            onMenuSelected: _onMenuSelected,
+          ),
           Expanded(
             child: Container(
               color: const Color(0xFFf5f7fa),
-              child: _selectedIndex < _widgetOptions.length
-                  ? _widgetOptions[_selectedIndex]
-                  : const PlaceholderScreen(title: 'Halaman Tidak Ditemukan'),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: KeyedSubtree(
+                  key: ValueKey<int>(_selectedIndex),
+                  child: content,
+                ),
+              ),
             ),
           ),
         ],

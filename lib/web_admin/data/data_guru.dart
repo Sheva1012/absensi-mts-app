@@ -4,6 +4,9 @@ import 'package:multi_select_flutter/multi_select_flutter.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 
+// Import Constants agar aman
+import '../core/constants.dart';
+
 // --- MODEL KELAS ---
 class Kelas {
   final String id;
@@ -100,6 +103,7 @@ class _PageGuruState extends State<PageGuru> {
             Text(guru == null ? 'Tambah Data Guru' : 'Edit Data Guru'),
           ],
         ),
+        // TAMPILAN TETAP SAMA (50% Lebar Layar)
         content: SizedBox(
           width: MediaQuery.of(context).size.width * 0.5,
           child: SingleChildScrollView(
@@ -113,21 +117,20 @@ class _PageGuruState extends State<PageGuru> {
                     // 1. Ambil password dari form
                     final String password = data['password'];
 
-                    // 2. Buat Client Sementara (Tanpa Persistence)
-                    // PENTING: Ganti URL dan KEY dengan milik Anda
+                    // 2. Buat Client Sementara (OPTIMIZED: Menggunakan AppConstants)
+                    // Ini perbaikan keamanannya, URL tidak lagi hardcoded
                     final tempClient = SupabaseClient(
-                      'https://eachbhkjgadrpmrpbwat.supabase.co',
-                      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2hiaGtqZ2FkcnBtcnBid2F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2Njk1MDEsImV4cCI6MjA3NTI0NTUwMX0.gZPdf88neU4yuLdKkUlTKNadpsRArxUp2IlQHk-XCrI',
+                      AppConstants.supabaseUrl,
+                      AppConstants.supabaseAnonKey,
                       authOptions: const FlutterAuthClientOptions(
-                        authFlowType: AuthFlowType
-                            .implicit, // Mencegah error asyncStorage
+                        authFlowType: AuthFlowType.implicit,
                       ),
                     );
 
-                    // 3. Buat Akun Login dengan Password dari Form
+                    // 3. Buat Akun Login
                     final authResponse = await tempClient.auth.signUp(
                       email: data['email'],
-                      password: password, // <-- GUNAKAN PASSWORD DARI INPUT
+                      password: password,
                     );
 
                     if (authResponse.user == null) {
@@ -140,10 +143,8 @@ class _PageGuruState extends State<PageGuru> {
                     final guruDataToInsert = Map<String, dynamic>.from(data);
                     guruDataToInsert['id'] = newUserId;
 
-                    // Bersihkan data yang tidak ada di kolom tabel guru
-                    guruDataToInsert.remove(
-                      'password',
-                    ); // Hapus field password (jangan simpan plain text di DB!)
+                    // Bersihkan data
+                    guruDataToInsert.remove('password');
                     if (guruDataToInsert['avatar_url'] == null) {
                       guruDataToInsert.remove('avatar_url');
                     }
@@ -158,11 +159,8 @@ class _PageGuruState extends State<PageGuru> {
                     tempClient.dispose();
                   } else {
                     // --- EDIT DATA (UPDATE) ---
-                    // Tidak mengupdate password di sini
                     final id = guru['id'];
-
-                    // Hapus password dari data update jika tidak sengaja terbawa
-                    data.remove('password');
+                    data.remove('password'); // Hapus password agar aman
 
                     await supabase.from('guru').update(data).eq('id', id);
 
@@ -211,7 +209,6 @@ class _PageGuruState extends State<PageGuru> {
                 final avatarUrl = guru['avatar_url'] as String?;
                 if (avatarUrl != null && avatarUrl.isNotEmpty) {
                   try {
-                    // Coba hapus gambar, tapi jangan gagalkan proses jika file tidak ketemu
                     final fileName = avatarUrl.split('/').last;
                     await supabase.storage.from('avatars').remove([
                       'public/$fileName',
@@ -366,7 +363,7 @@ class _PageGuruState extends State<PageGuru> {
                 child: DataTable(
                   columnSpacing: 24,
                   headingRowHeight: 56,
-                  dataRowHeight: 80, // Sedikit dipertinggi agar avatar muat
+                  dataRowHeight: 80,
                   headingRowColor: MaterialStateProperty.all(
                     Colors.blue.shade50,
                   ),
@@ -423,7 +420,6 @@ class _PageGuruState extends State<PageGuru> {
                   rows: List.generate(guruData.length, (i) {
                     final guru = guruData[i];
 
-                    // Logic display kelas
                     final dynamic data = guru['kelas_diampu'];
                     List<String> semuaKelas = [];
                     if (data is Map<String, dynamic>) {
@@ -534,10 +530,10 @@ Widget _buildActionButton(
   );
 }
 
-// --- FORM GURU ---
+// --- FORM GURU (UI SAMA PERSIS) ---
 class FormGuru extends StatefulWidget {
   final Map<String, dynamic>? initialData;
-  // PERBAIKAN PENTING: Mengubah tipe Function menjadi Future<void>
+  // Callback disesuaikan dengan kebutuhan Future
   final Future<void> Function(Map<String, dynamic>) onSave;
 
   const FormGuru({super.key, this.initialData, required this.onSave});
@@ -552,14 +548,11 @@ class _FormGuruState extends State<FormGuru> {
 
   late final TextEditingController _namaController;
   late final TextEditingController _emailController;
-  // BARU: Controller untuk password
   late final TextEditingController _passwordController;
 
   String? _selectedRole;
   List<Kelas> _selectedKelas = [];
   bool _isUploading = false;
-
-  // BARU: State untuk melihat/menyembunyikan password
   bool _obscurePassword = true;
 
   Uint8List? _avatarBytes;
@@ -584,7 +577,6 @@ class _FormGuruState extends State<FormGuru> {
     final data = widget.initialData;
     _namaController = TextEditingController(text: data?['nama'] ?? '');
     _emailController = TextEditingController(text: data?['email'] ?? '');
-    // Password kosong saat awal
     _passwordController = TextEditingController();
 
     final initialRole = data?['role'];
@@ -612,7 +604,7 @@ class _FormGuruState extends State<FormGuru> {
   void dispose() {
     _namaController.dispose();
     _emailController.dispose();
-    _passwordController.dispose(); // Jangan lupa dispose
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -670,7 +662,6 @@ class _FormGuruState extends State<FormGuru> {
           'role': _selectedRole,
           'kelas_diampu': groupedKelas,
           'avatar_url': avatarUrl,
-          // BARU: Sertakan password di data yang dikirim
           'password': _passwordController.text,
         };
 
@@ -694,7 +685,6 @@ class _FormGuruState extends State<FormGuru> {
 
   @override
   Widget build(BuildContext context) {
-    // Cek apakah ini mode Edit atau Tambah Baru
     final isEditing = widget.initialData != null;
 
     return Form(
@@ -717,13 +707,11 @@ class _FormGuruState extends State<FormGuru> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _emailController,
-            // Jika sedang edit, email biasanya tidak boleh diganti agar tidak merusak Auth
             readOnly: isEditing,
             decoration: InputDecoration(
               labelText: 'Email',
               border: const OutlineInputBorder(),
               prefixIcon: const Icon(Icons.email),
-              // Beri warna abu-abu jika readOnly
               fillColor: isEditing ? Colors.grey.shade200 : null,
               filled: isEditing,
             ),
@@ -733,13 +721,11 @@ class _FormGuruState extends State<FormGuru> {
               return null;
             },
           ),
-
-          // BARU: Kolom Password (Hanya muncul saat Tambah Baru)
           if (!isEditing) ...[
             const SizedBox(height: 16),
             TextFormField(
               controller: _passwordController,
-              obscureText: _obscurePassword, // Agar teks jadi bintang/titik
+              obscureText: _obscurePassword,
               decoration: InputDecoration(
                 labelText: 'Password Login App',
                 border: const OutlineInputBorder(),
@@ -762,7 +748,6 @@ class _FormGuruState extends State<FormGuru> {
               },
             ),
           ],
-
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             value: _selectedRole,

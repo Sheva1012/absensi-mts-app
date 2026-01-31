@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'absensi_controller.dart';
+
+// Pastikan import ini mengarah ke file controller yang benar
+import '../logic/absensi_controller.dart';
 
 class PageAbsensi extends StatelessWidget {
   final String schoolName;
@@ -358,16 +360,22 @@ class _KelasFilterDropdown extends StatelessWidget {
                 isExpanded: true,
                 icon: const Icon(Icons.arrow_drop_down),
                 hint: const Text("Semua Kelas", style: TextStyle(fontSize: 13)),
-                items: controller.daftarKelas.map((kelas) {
-                  return DropdownMenuItem<int?>(
-                    value: kelas['id'],
-                    child: Text(
-                      kelas['nama_kelas'],
-                      style: const TextStyle(fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }).toList(),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text("Semua Kelas", style: TextStyle(fontSize: 13)),
+                  ),
+                  ...controller.daftarKelas.map((kelas) {
+                    return DropdownMenuItem<int?>(
+                      value: kelas['id'],
+                      child: Text(
+                        kelas['nama_kelas'],
+                        style: const TextStyle(fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }),
+                ],
                 onChanged: (val) => controller.onKelasSelected(val),
               ),
             ),
@@ -446,6 +454,8 @@ class _AbsensiContent extends StatelessWidget {
     final int current = controller.currentPage;
     final int limit = controller.itemLimit;
 
+    // Perbaikan logika label pagination jika data kosong handled di atas,
+    // tapi aman juga dicek disini
     final int startItem = totalData == 0 ? 0 : ((current - 1) * limit) + 1;
     final int endItem = (current * limit) > totalData
         ? totalData
@@ -549,7 +559,10 @@ class _AbsensiContent extends StatelessWidget {
         border: Border.all(color: Colors.grey.shade300),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: IconButton(icon: Icon(icon), onPressed: onPressed),
+      child: IconButton(
+        icon: Icon(icon, color: onPressed == null ? Colors.grey : Colors.black),
+        onPressed: onPressed,
+      ),
     );
   }
 }
@@ -775,11 +788,14 @@ class _RekapTable extends StatelessWidget {
                 ],
                 rows: List.generate(data.length, (index) {
                   final item = data[index];
+                  // Di RPC kita return 'nama_siswa'
+                  final nama = item['nama_siswa'] ?? 'Unknown';
+
                   return DataRow(
                     cells: [
                       DataCell(
                         Text(
-                          item['nama'],
+                          nama,
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -830,6 +846,7 @@ class _StatusBadge extends StatelessWidget {
     Color color;
     switch (status.toLowerCase()) {
       case 'hadir':
+      case 'pulang':
         color = Colors.green;
         break;
       case 'terlambat':
