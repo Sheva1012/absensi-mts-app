@@ -514,7 +514,7 @@ class _NotifikasiTestPageState extends State<NotifikasiTestPage> {
             
             // Notification Type Dropdown
             DropdownButtonFormField<NotificationType>(
-              value: _selectedType,
+              initialValue: _selectedType,
               decoration: InputDecoration(
                 labelText: 'Tipe Notifikasi',
                 prefixIcon: const Icon(Icons.category, size: 20),

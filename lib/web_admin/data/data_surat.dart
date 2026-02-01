@@ -227,7 +227,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
         final ext = '.${lower.split('.').last}';
 
         // Nama file: NamaSiswa_Tanggal_JenisSurat.jpg (tanpa folder)
-        final filename = '${siswaName}_${tanggal}_${jenis}$ext';
+        final filename = '${siswaName}_${tanggal}_$jenis$ext';
 
         archive.addFile(
           ArchiveFile(filename, resp.bodyBytes.length, resp.bodyBytes),
