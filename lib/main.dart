@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
@@ -15,12 +16,28 @@ import 'web_admin/data/data_guru.dart';
 import 'web_admin/data/data_siswa.dart';
 import 'web_admin/data/data_absensi.dart';
 import 'web_admin/data/data_surat.dart';
+import 'web_admin/data/data_notifikasi_test.dart';
 import 'web_admin/placeholder.dart';
 
 final supabase = Supabase.instance.client;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 0. Load environment variables (skip on web since .env isn't served as asset)
+  if (!kIsWeb) {
+    try {
+      await dotenv.load(fileName: '.env');
+    } catch (e) {
+      print('Warning: Could not load .env file: $e');
+    }
+  } else {
+    // On web, initialize with hardcoded values or use a config service
+    AppConstants.initializeForWeb(
+      supabaseUrl: 'https://eachbhkjgadrpmrpbwat.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhY2hiaGtqZ2FkcnBtcnBid2F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2Njk1MDEsImV4cCI6MjA3NTI0NTUwMX0.gZPdf88neU4yuLdKkUlTKNadpsRArxUp2IlQHk-XCrI',
+    );
+  }
 
   // 1. Initialize Supabase 
   await Supabase.initialize(
@@ -121,7 +138,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   String? _selectedKelasId;
 
   void _onMenuSelected(int index) async {
-    if (index == 6) {
+    if (index == 7) {
       await supabase.auth.signOut();
       return;
     }
@@ -160,6 +177,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         initialKelasId: _selectedKelasId,
       ),
       const DataSuratPage(
+        schoolName: AppConstants.schoolName,
+      ),
+      const NotifikasiTestPage(
         schoolName: AppConstants.schoolName,
       ),
       const SizedBox(),

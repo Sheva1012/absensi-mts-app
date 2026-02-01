@@ -262,7 +262,7 @@ class _KelasDataTable extends StatelessWidget {
                   columnSpacing: 12,
                   headingRowHeight: 50,
                   dataRowHeight: 60,
-                  headingRowColor: MaterialStateProperty.all(
+                  headingRowColor: WidgetStateProperty.all(
                     Colors.blue.shade50,
                   ),
                   columns: const [
@@ -576,7 +576,7 @@ class _UpsertKelasDialogState extends State<_UpsertKelasDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: selectedGuruId,
+              initialValue: selectedGuruId,
               decoration: const InputDecoration(
                 labelText: 'Pilih Wali Kelas',
                 border: OutlineInputBorder(),

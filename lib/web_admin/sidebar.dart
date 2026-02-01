@@ -44,6 +44,7 @@ class _SidebarState extends State<Sidebar> {
       {'icon': Icons.class_outlined, 'title': 'Data Kelas', 'index': 3},
       {'icon': Icons.school_outlined, 'title': 'Data Siswa', 'index': 4},
       {'icon': Icons.mail_outline, 'title': 'Surat', 'index': 5},
+      {'icon': Icons.notifications_active_outlined, 'title': 'Test Notifikasi', 'index': 6},
     ];
 
     return AnimatedContainer(
@@ -102,7 +103,7 @@ class _SidebarState extends State<Sidebar> {
                   _buildMenuItem(
                     icon: Icons.logout_rounded,
                     title: 'Keluar',
-                    index: 6,
+                    index: 7,
                     isLogout: true,
                   ),
                 ],

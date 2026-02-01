@@ -137,7 +137,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
-                    value: kelasId,
+                    initialValue: kelasId,
                     hint: const Text('Pilih Kelas'),
                     decoration: const InputDecoration(
                       labelText: 'Kelas',
@@ -171,7 +171,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    value: status,
+                    initialValue: status,
                     hint: const Text('Pilih Status'),
                     decoration: const InputDecoration(
                       labelText: 'Status',
@@ -369,7 +369,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     DropdownButtonFormField<int>(
-                      value: sourceKelasId,
+                      initialValue: sourceKelasId,
                       hint: const Text("Pilih Kelas Asal (Misal: 7A)"),
                       items: _logic.kelasList.map((k) {
                         return DropdownMenuItem(
@@ -395,8 +395,9 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                       onChanged: (val) {
                         setStateDialog(() {
                           isLuluskan = val ?? false;
-                          if (isLuluskan)
+                          if (isLuluskan) {
                             targetKelasId = null; // Reset target jika lulus
+                          }
                         });
                       },
                     ),
@@ -409,7 +410,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       DropdownButtonFormField<int>(
-                        value: targetKelasId,
+                        initialValue: targetKelasId,
                         hint: const Text("Pilih Kelas Tujuan (Misal: 8A)"),
                         items: _logic.kelasList.map((k) {
                           return DropdownMenuItem(
@@ -716,7 +717,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                     SizedBox(
                       width: 90,
                       child: DropdownButtonFormField<int>(
-                        value: _logic.itemLimit,
+                        initialValue: _logic.itemLimit,
                         decoration: InputDecoration(
                           labelText: 'Show',
                           contentPadding: const EdgeInsets.symmetric(
@@ -747,7 +748,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<int>(
-                        value: _logic.selectedKelasId,
+                        initialValue: _logic.selectedKelasId,
                         hint: const Text("Semua Kelas"),
                         isExpanded: true,
                         decoration: InputDecoration(
@@ -798,7 +799,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<String>(
-                        value: _logic.selectedStatus,
+                        initialValue: _logic.selectedStatus,
                         hint: const Text("Semua Status"),
                         decoration: InputDecoration(
                           labelText: 'Status',
@@ -887,7 +888,7 @@ class _DataSiswaPageState extends State<DataSiswaPage> {
                       headingRowHeight: 56,
                       dataRowHeight:
                           64, // Sedikit lebih tinggi agar tombol muat
-                      headingRowColor: MaterialStateProperty.all(
+                      headingRowColor: WidgetStateProperty.all(
                         Colors.blue.shade50,
                       ),
                       columns: const [

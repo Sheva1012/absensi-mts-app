@@ -1325,6 +1325,8 @@ class _ActivityCard extends StatelessWidget {
     }
   }
 
+  
+
   Color _getColorForStatus(String? status) {
     switch (status?.toLowerCase()) {
       case 'hadir':
@@ -1397,6 +1399,7 @@ class _ActivityCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(icon, color: color, size: 18),
+                    
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1445,3 +1448,4 @@ class _WhiteCard extends StatelessWidget {
     );
   }
 }
+

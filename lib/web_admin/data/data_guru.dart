@@ -331,7 +331,7 @@ class _PageGuruState extends State<PageGuru> {
       );
     }
 
-    final ScrollController _horizontalController = ScrollController();
+    final ScrollController horizontalController = ScrollController();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -351,12 +351,12 @@ class _PageGuruState extends State<PageGuru> {
           final double minTableWidth = constraints.maxWidth;
 
           return Scrollbar(
-            controller: _horizontalController,
+            controller: horizontalController,
             thumbVisibility: true,
             trackVisibility: true,
             scrollbarOrientation: ScrollbarOrientation.bottom,
             child: SingleChildScrollView(
-              controller: _horizontalController,
+              controller: horizontalController,
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
                 constraints: BoxConstraints(minWidth: minTableWidth),
@@ -364,7 +364,7 @@ class _PageGuruState extends State<PageGuru> {
                   columnSpacing: 24,
                   headingRowHeight: 56,
                   dataRowHeight: 80,
-                  headingRowColor: MaterialStateProperty.all(
+                  headingRowColor: WidgetStateProperty.all(
                     Colors.blue.shade50,
                   ),
                   columns: const [
@@ -750,7 +750,7 @@ class _FormGuruState extends State<FormGuru> {
           ],
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
-            value: _selectedRole,
+            initialValue: _selectedRole,
             decoration: const InputDecoration(
               labelText: 'Role',
               border: OutlineInputBorder(),

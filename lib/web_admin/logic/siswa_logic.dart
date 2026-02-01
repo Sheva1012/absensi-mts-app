@@ -345,8 +345,9 @@ class DataSiswaLogic with ChangeNotifier {
       final sheetName = excel.tables.keys.first;
       final sheet = excel.tables[sheetName];
 
-      if (sheet == null || sheet.rows.length < 2)
+      if (sheet == null || sheet.rows.length < 2) {
         throw "Sheet kosong/format salah.";
+      }
 
       final List<Map<String, dynamic>> batchData = [];
 

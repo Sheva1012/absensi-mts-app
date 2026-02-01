@@ -179,7 +179,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
   Future<List<Map<String, dynamic>>> _fetchAllSuratForGlobalAction() async {
     final res = await supabase
         .from('surat')
-        .select('id, siswa_id, tanggal, jenis, file_url')
+        .select('id, siswa_id, tanggal, jenis, file_url, siswa(nama)')
         .order('tanggal', ascending: false);
     return List<Map<String, dynamic>>.from(res);
   }
@@ -220,14 +220,14 @@ class _DataSuratPageState extends State<DataSuratPage> {
         final resp = await http.get(Uri.parse(url));
         if (resp.statusCode != 200) continue;
 
-        final siswaId = (s['siswa_id'] ?? 'unknown').toString();
+        // Ambil nama siswa dari relasi siswa(nama)
+        final siswaName = (s['siswa']?['nama'] ?? 'unknown').toString();
         final tanggal = (s['tanggal'] ?? 'unknown').toString();
         final jenis = (s['jenis'] ?? 'unknown').toString();
         final ext = '.${lower.split('.').last}';
 
-        // rapi dalam zip
-        final filename =
-            'siswa_$siswaId/surat_${s['id']}_${jenis}_$tanggal$ext';
+        // Nama file: NamaSiswa_Tanggal_JenisSurat.jpg (tanpa folder)
+        final filename = '${siswaName}_${tanggal}_${jenis}$ext';
 
         archive.addFile(
           ArchiveFile(filename, resp.bodyBytes.length, resp.bodyBytes),
@@ -620,7 +620,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
               SizedBox(
                 width: 90,
                 child: DropdownButtonFormField<int>(
-                  value: _rowsPerPage,
+                  initialValue: _rowsPerPage,
                   decoration: InputDecoration(
                     labelText: 'Show',
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10),
@@ -678,7 +678,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
               SizedBox(
                 width: 220,
                 child: DropdownButtonFormField<String?>(
-                  value: selectedJenisSurat,
+                  initialValue: selectedJenisSurat,
                   items: [
                     const DropdownMenuItem<String?>(
                       value: null,
@@ -839,7 +839,7 @@ class _DataSuratPageState extends State<DataSuratPage> {
                     columnSpacing: 24,
                     headingRowHeight: 56,
                     dataRowHeight: 64,
-                    headingRowColor: MaterialStateProperty.all(
+                    headingRowColor: WidgetStateProperty.all(
                       Colors.blue.shade50,
                     ),
                     columns: const [

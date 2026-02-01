@@ -47,6 +47,7 @@ class PageAbsensi extends StatelessWidget {
                   ),
                 ),
               ),
+              
             ),
             floatingActionButton: FloatingActionButton(
               backgroundColor: Colors.blue.shade700,
@@ -60,6 +61,7 @@ class PageAbsensi extends StatelessWidget {
               },
               child: const Icon(Icons.refresh, color: Colors.white),
             ),
+            
           );
         },
       ),
@@ -603,7 +605,7 @@ class _AbsensiTable extends StatelessWidget {
               constraints: BoxConstraints(minWidth: constraints.maxWidth),
               child: DataTable(
                 columnSpacing: 16,
-                headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+                headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
                 columns: const [
                   DataColumn(
                     label: Text(
@@ -724,7 +726,7 @@ class _RekapTable extends StatelessWidget {
               constraints: BoxConstraints(minWidth: constraints.maxWidth),
               child: DataTable(
                 columnSpacing: 24,
-                headingRowColor: MaterialStateProperty.all(
+                headingRowColor: WidgetStateProperty.all(
                   Colors.green.shade50,
                 ),
                 columns: const [

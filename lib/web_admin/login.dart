@@ -165,10 +165,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                   context,
                                 ).requestFocus(_passwordFocus),
                                 validator: (value) {
-                                  if (value == null || value.isEmpty)
+                                  if (value == null || value.isEmpty) {
                                     return 'Email wajib diisi';
-                                  if (!value.contains('@'))
+                                  }
+                                  if (!value.contains('@')) {
                                     return 'Format email tidak valid';
+                                  }
                                   return null;
                                 },
                               ),
@@ -200,10 +202,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 textInputAction: TextInputAction.done,
                                 onFieldSubmitted: (_) => _handleLogin(),
                                 validator: (value) {
-                                  if (value == null || value.isEmpty)
+                                  if (value == null || value.isEmpty) {
                                     return 'Password wajib diisi';
-                                  if (value.length < 5)
+                                  }
+                                  if (value.length < 5) {
                                     return 'Password minimal 5 karakter';
+                                  }
                                   return null;
                                 },
                               ),
